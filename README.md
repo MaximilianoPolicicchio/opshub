@@ -48,6 +48,17 @@ Each of these is a decision with a trade-off behind it, not a checkbox:
 - **CI that actually runs the product.** Migrations, seed, 55 unit tests, 35 API
   e2e tests against real Postgres, and a Playwright browser suite, on every push.
 
+### Documentation
+
+| | |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | Module boundaries, request path, data model |
+| [docs/business-rules.md](docs/business-rules.md) | Exact predicates and formulas |
+| [docs/automations.md](docs/automations.md) | Webhook contract and signature verification |
+| [docs/security.md](docs/security.md) | Threat model and isolation detail |
+| [docs/deployment.md](docs/deployment.md) | Env vars, migrations, rollback |
+| [docs/adr/](docs/adr/) | Seven decision records — what was rejected, and why |
+
 ### Architecture at a glance
 
 ```mermaid
