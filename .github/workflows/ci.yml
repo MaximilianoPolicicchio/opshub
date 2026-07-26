@@ -2,12 +2,30 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # The repository's default branch is `master`. `main` is listed so the
+    # workflow keeps working if/when the default branch is migrated, without
+    # a window where pushes run no CI at all.
+    branches: [main, master]
   pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+# A second push to the same branch makes the in-flight run obsolete.
+# Cancel it rather than paying for a result nobody will read.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PNPM_VERSION: "9"
 
 jobs:
   build:
+    name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     services:
       postgres:
         image: postgres:16
@@ -27,6 +45,8 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opshub_test?schema=public
       JWT_ACCESS_SECRET: ci-access-secret-please-override-me-32chars
       JWT_REFRESH_SECRET: ci-refresh-secret-please-override-me-32chars
+      # The in-process cron must stay off: it would race the tests by mutating
+      # project health and firing webhooks mid-assertion.
       SCHEDULER_ENABLED: "false"
       NODE_ENV: test
 
@@ -35,15 +55,26 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # The TimeEntry overlap guard is a GiST exclusion constraint over
+      # (userId, tstzrange), which needs btree_gist for the equality operator.
+      # Without it `migrate deploy` fails with a confusing operator-class error,
+      # so make the real cause obvious and fail early.
+      - name: Enable btree_gist
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d opshub_test \
+            -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS btree_gist;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -d opshub_test \
+            -tAc "SELECT extname FROM pg_extension WHERE extname='btree_gist';" | grep -q btree_gist
 
       - name: Prisma validate
         run: pnpm --filter @opshub/api exec prisma validate
@@ -74,3 +105,33 @@ jobs:
 
       - name: Build web
         run: pnpm --filter @opshub/web build
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Gate on critical only. Highs are reported but do not fail the build:
+      # the ones currently outstanding are Next.js advisories that require a
+      # major upgrade, tracked separately. See docs/security.md for the policy
+      # and the current exception list.
+      - name: Audit production dependencies (fail on critical)
+        run: pnpm audit --prod --audit-level critical
+
+      - name: Report high and moderate advisories (non-blocking)
+        if: always()
+        run: pnpm audit --prod || true

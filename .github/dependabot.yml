@@ -1,0 +1,37 @@
+version: 2
+
+updates:
+  # Application dependencies. Grouped so a week's patches arrive as a couple of
+  # reviewable PRs instead of twenty; majors stay separate because they need
+  # a human to read the changelog.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    groups:
+      production-minor-patch:
+        dependency-type: production
+        update-types: [minor, patch]
+      development-minor-patch:
+        dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # Majors are opt-in: Next 14 -> 15 changes async params and caching
+      # defaults, Nest majors move peer ranges. Handled as deliberate work.
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+
+  # Workflow actions pin to tags that silently go stale and are a supply-chain
+  # surface of their own.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns: ["*"]
