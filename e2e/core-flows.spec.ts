@@ -80,13 +80,23 @@ test.describe("core flows", () => {
    * boot. Session persistence therefore works in development and breaks in
    * production, which is the worst possible split.
    *
-   * Ruled out: the Secure cookie flag over plain http (COOKIE_SECURE=false is
-   * set for this suite and the behaviour is unchanged).
+   * Ruled out so far:
+   * - The Secure cookie flag over plain http. COOKIE_SECURE=false is set for
+   *   this suite and the behaviour is unchanged.
+   * - The API. Driving /auth/refresh directly against the production build
+   *   rotates correctly through three generations, and replaying a spent token
+   *   returns REFRESH_TOKEN_REUSED exactly as designed.
+   * - NEXT_PUBLIC_API_URL resolution. The session route falls back to
+   *   http://localhost:4000/api/v1, which is correct for this setup.
+   * - A second caller of /api/session. Only api-client's single-flight
+   *   tryRefresh() issues the GET; auth.tsx only POSTs and DELETEs.
    *
-   * Still to check: whether the boot refresh races an api-client 401 refresh
-   * and trips the reuse-detection that revokes the whole token family, and
-   * whether NEXT_PUBLIC_API_URL resolves correctly inside the production
-   * server at runtime.
+   * So the token chain and the server are fine, and there is one code path
+   * issuing the exchange. What remains is why that single exchange does not
+   * restore the session under `next start` while it does under `next dev`.
+   * Next step: capture the /api/session request and response headers in the
+   * browser during a production-build reload and check whether the Set-Cookie
+   * from the boot exchange is actually stored before the next navigation.
    *
    * Marked fixme so CI stays honest — green means green — while the bug stays
    * visible and reproducible. See README "Known issues".
