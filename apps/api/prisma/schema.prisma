@@ -1,0 +1,503 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum RoleName {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ProjectType {
+  PRODUCT
+  CLIENT_PRODUCT
+  AUTOMATION_SYSTEM
+  INTERNAL_TOOL
+  OTHER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  MAINTENANCE
+  PAUSED
+  ARCHIVED
+}
+
+enum ProjectHealth {
+  HEALTHY
+  NEEDS_ATTENTION
+  BLOCKED
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TaskCategory {
+  FEATURE
+  BUG
+  MAINTENANCE
+  CLIENT_REQUEST
+  AUTOMATION
+  DEPLOYMENT
+  DOCUMENTATION
+  TECH_DEBT
+}
+
+enum TaskStatus {
+  BACKLOG
+  NEXT
+  IN_PROGRESS
+  WAITING
+  REVIEW
+  DONE
+}
+
+enum MilestoneStatus {
+  PLANNED
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum BillingModel {
+  FIXED_PRICE
+  HOURLY
+  INTERNAL
+}
+
+enum RecurrenceUnit {
+  DAY
+  WEEK
+  MONTH
+}
+
+enum RecurrenceAnchor {
+  DUE_DATE
+  COMPLETION_DATE
+}
+
+enum AutomationTrigger {
+  TASK_OVERDUE_HIGH_PRIORITY
+  PROJECT_HEALTH_CHANGED
+  BUDGET_THRESHOLD_REACHED
+  WEEKLY_REVIEW_GENERATED
+  MANUAL
+}
+
+enum AutomationRunStatus {
+  SUCCESS
+  FAILED
+  SIMULATED
+  SKIPPED
+}
+
+enum ActivityType {
+  PROJECT_CREATED
+  PROJECT_STATUS_CHANGED
+  PROJECT_HEALTH_CHANGED
+  TASK_CREATED
+  TASK_STATUS_CHANGED
+  TASK_PRIORITY_CHANGED
+  TASK_BLOCKED
+  TASK_UNBLOCKED
+  TASK_COMPLETED
+  TASK_RECURRED
+  MILESTONE_COMPLETED
+  TIME_ENTRY_LOGGED
+  BUDGET_CREATED
+  BUDGET_THRESHOLD_REACHED
+  AUTOMATION_RUN
+  WEEKLY_REVIEW_GENERATED
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy & identity
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  timezone        String   @default("America/Argentina/Buenos_Aires")
+  weekStartsOn    Int      @default(1)
+  defaultCurrency String   @default("USD")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  memberships Membership[]
+  projects    Project[]
+  templates   ProjectTemplate[]
+  automations Automation[]
+  activity    ActivityEvent[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  timezone     String    @default("America/Argentina/Buenos_Aires")
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  memberships   Membership[]
+  timeEntries   TimeEntry[]
+  notes         Note[]
+  activity      ActivityEvent[]
+  refreshTokens RefreshToken[]
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        RoleName @unique
+  permissions String[]
+
+  memberships Membership[]
+}
+
+model Membership {
+  id         String    @id @default(cuid())
+  workspaceId String
+  userId     String
+  roleId     String
+  invitedAt  DateTime  @default(now())
+  acceptedAt DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id])
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Projects
+// ---------------------------------------------------------------------------
+
+model Project {
+  id                String        @id @default(cuid())
+  workspaceId       String
+  name              String
+  description       String?
+  type              ProjectType
+  status            ProjectStatus @default(ACTIVE)
+  health            ProjectHealth @default(HEALTHY)
+  healthReason      String?
+  healthEvaluatedAt DateTime?
+  priority          Priority      @default(MEDIUM)
+  technologyTags    String[]      @default([])
+  repositoryUrl     String?
+  deploymentUrl     String?
+  documentationUrl  String?
+  stakeholderLabel  String?
+  color             String?
+  templateId        String?
+  lastActivityAt    DateTime      @default(now())
+  archivedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  template    ProjectTemplate? @relation(fields: [templateId], references: [id])
+  tasks       Task[]
+  milestones  Milestone[]
+  notes       Note[]
+  timeEntries TimeEntry[]
+  budget      ProjectBudget?
+  activity    ActivityEvent[]
+  automations Automation[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, status, health])
+  @@index([workspaceId, lastActivityAt])
+}
+
+model ProjectTemplate {
+  id           String      @id @default(cuid())
+  workspaceId  String?
+  key          String
+  name         String
+  description  String?
+  projectType  ProjectType
+  starterTasks Json        @default("[]")
+  isBuiltIn    Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projects  Project[]
+
+  @@unique([workspaceId, key])
+}
+
+model Milestone {
+  id          String          @id @default(cuid())
+  workspaceId String
+  projectId   String
+  title       String
+  description String?
+  targetDate  DateTime?
+  completedAt DateTime?
+  status      MilestoneStatus @default(PLANNED)
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([workspaceId, projectId, sortOrder])
+}
+
+// ---------------------------------------------------------------------------
+// Tasks
+// ---------------------------------------------------------------------------
+
+model Task {
+  id              String       @id @default(cuid())
+  workspaceId     String
+  projectId       String
+  milestoneId     String?
+  title           String
+  description     String?
+  category        TaskCategory @default(FEATURE)
+  priority        Priority     @default(MEDIUM)
+  status          TaskStatus   @default(BACKLOG)
+  dueDate         DateTime?
+  estimatedHours  Decimal?     @db.Decimal(6, 2)
+  tags            String[]     @default([])
+  sortOrder       Int          @default(0)
+  surfacedForDate DateTime?    @db.Date
+  isBlocked       Boolean      @default(false)
+  completedAt     DateTime?
+  archivedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  recurrenceUnit     RecurrenceUnit?
+  recurrenceInterval Int?
+  recurrenceAnchor   RecurrenceAnchor? @default(DUE_DATE)
+  recurrenceEndsAt   DateTime?
+  recurrenceSeriesId String?
+  occurrenceIndex    Int?
+
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestone    Milestone?       @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  dependencies TaskDependency[] @relation("dependent")
+  dependents   TaskDependency[] @relation("prerequisite")
+  links        TaskLink[]
+  notes        Note[]
+  timeEntries  TimeEntry[]
+
+  @@index([workspaceId, projectId, status, sortOrder])
+  @@index([workspaceId, status, dueDate])
+  @@index([workspaceId, priority, dueDate])
+  @@unique([recurrenceSeriesId, occurrenceIndex])
+}
+
+model TaskDependency {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  taskId          String
+  dependsOnTaskId String
+  createdAt       DateTime @default(now())
+
+  task      Task @relation("dependent", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOn Task @relation("prerequisite", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, dependsOnTaskId])
+  @@index([dependsOnTaskId])
+}
+
+model TaskLink {
+  id          String   @id @default(cuid())
+  workspaceId String
+  taskId      String
+  label       String
+  url         String
+  createdAt   DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  workspaceId String
+  projectId   String
+  taskId      String?
+  authorId    String
+  title       String?
+  body        String
+  pinned      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+
+  @@index([workspaceId, projectId, pinned, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Time tracking
+// ---------------------------------------------------------------------------
+
+model TimeEntry {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  projectId       String
+  taskId          String?
+  userId          String
+  startTime       DateTime  @db.Timestamptz(3)
+  endTime         DateTime? @db.Timestamptz(3)
+  durationMinutes Int?
+  billable        Boolean   @default(false)
+  description     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId, startTime])
+  @@index([workspaceId, projectId, startTime])
+}
+
+// ---------------------------------------------------------------------------
+// Budgets
+// ---------------------------------------------------------------------------
+
+model ProjectBudget {
+  id              String       @id @default(cuid())
+  workspaceId     String
+  projectId       String       @unique
+  currency        String       @default("USD")
+  billingModel    BillingModel
+  budgetAmount    Decimal?     @db.Decimal(12, 2)
+  hourlyRate      Decimal?     @db.Decimal(10, 2)
+  estimatedHours  Decimal?     @db.Decimal(8, 2)
+  startDate       DateTime?
+  endDate         DateTime?
+  alertThresholds Int[]        @default([50, 75, 90, 100])
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  alerts  BudgetAlert[]
+}
+
+model BudgetAlert {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  projectBudgetId   String
+  threshold         Int
+  burnPercentAtFire Decimal   @db.Decimal(6, 2)
+  amountAtFire      Decimal   @db.Decimal(12, 2)
+  triggeredAt       DateTime  @default(now())
+  acknowledgedAt    DateTime?
+
+  budget ProjectBudget @relation(fields: [projectBudgetId], references: [id], onDelete: Cascade)
+
+  @@unique([projectBudgetId, threshold])
+  @@index([workspaceId, triggeredAt])
+}
+
+// ---------------------------------------------------------------------------
+// Automations & activity
+// ---------------------------------------------------------------------------
+
+model Automation {
+  id          String            @id @default(cuid())
+  workspaceId String
+  projectId   String?
+  name        String
+  description String?
+  trigger     AutomationTrigger
+  enabled     Boolean           @default(true)
+  config      Json              @default("{}")
+  lastRunAt   DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runs      AutomationRun[]
+
+  @@index([workspaceId, trigger, enabled])
+}
+
+model AutomationRun {
+  id             String              @id @default(cuid())
+  workspaceId    String
+  automationId   String
+  projectId      String?
+  trigger        AutomationTrigger
+  status         AutomationRunStatus
+  simulated      Boolean             @default(false)
+  requestPayload Json
+  responseStatus Int?
+  responseBody   String?
+  errorMessage   String?
+  durationMs     Int?
+  startedAt      DateTime            @default(now())
+  finishedAt     DateTime?
+  dedupeKey      String?
+
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, dedupeKey])
+  @@index([workspaceId, startedAt])
+  @@index([automationId, startedAt])
+}
+
+model ActivityEvent {
+  id          String       @id @default(cuid())
+  workspaceId String
+  projectId   String?
+  actorId     String?
+  type        ActivityType
+  entityType  String
+  entityId    String?
+  summary     String
+  metadata    Json         @default("{}")
+  createdAt   DateTime     @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actor     User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([projectId, createdAt])
+}

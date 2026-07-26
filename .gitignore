@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+.turbo/
+pnpm-lock.yaml.bak
+apps/api/prisma/dev.db
