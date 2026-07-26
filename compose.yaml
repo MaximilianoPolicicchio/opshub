@@ -1,0 +1,102 @@
+# Full local stack: Postgres + API + web.
+#
+#   cp .env.docker.example .env.docker
+#   docker compose up --build
+#
+# Then open http://localhost:3000 and sign in with the seeded demo account.
+# Docker is optional for development — see the README for the native setup.
+
+name: opshub
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-opshub}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # The TimeEntry overlap guard is a GiST exclusion constraint over
+      # (userId, tstzrange), which needs btree_gist for the equality operator.
+      # Scripts in this directory run once, on first initialisation of an empty
+      # data volume — that is why migrate has its own CREATE EXTENSION too.
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-opshub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Migrations run as their own short-lived container rather than in the API
+  # entrypoint, so two API replicas can never race each other applying them.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      # Migrations need the Prisma CLI, a devDependency the runtime stage prunes.
+      target: migrator
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/opshub?schema=public}
+    # btree_gist is also created here, not only in the initdb script: that script
+    # runs once on a fresh volume, so an existing volume from before this change
+    # would otherwise never get the extension and migrate deploy would fail.
+    command: >
+      sh -c "
+      echo 'CREATE EXTENSION IF NOT EXISTS btree_gist;' |
+      npx prisma db execute --url \"$$DATABASE_URL\" --stdin &&
+      npx prisma migrate deploy --schema ./prisma/schema.prisma
+      "
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/opshub?schema=public}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env.docker}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env.docker}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-30d}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+      THROTTLE_ENABLED: ${THROTTLE_ENABLED:-true}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      API_PORT: "4000"
+    ports:
+      - "${API_PORT:-4000}:4000"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Inlined into the client bundle at build time, so it must be the URL
+        # the browser uses, not the internal `api` service name.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api/v1}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api/v1}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+volumes:
+  db-data:

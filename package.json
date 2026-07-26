@@ -9,13 +9,18 @@
   "scripts": {
     "dev:api": "pnpm --filter @opshub/api dev",
     "dev:web": "pnpm --filter @opshub/web dev",
-    "build": "pnpm -r build",
+    "build": "pnpm --filter @opshub/contracts build && pnpm --filter @opshub/api build && pnpm --filter @opshub/web build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "db:migrate": "pnpm --filter @opshub/api db:migrate",
     "db:seed": "pnpm --filter @opshub/api db:seed",
-    "db:reset": "pnpm --filter @opshub/api db:reset"
+    "db:reset": "pnpm --filter @opshub/api db:reset",
+    "docker:up": "docker compose --env-file .env.docker up --build",
+    "docker:down": "docker compose --env-file .env.docker down",
+    "docker:reset": "docker compose --env-file .env.docker down -v",
+    "docker:seed": "docker compose --env-file .env.docker run --rm migrate npx prisma db seed",
+    "docker:logs": "docker compose --env-file .env.docker logs -f api web"
   },
   "devDependencies": {
     "prettier": "^3.3.3",

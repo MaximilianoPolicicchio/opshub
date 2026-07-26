@@ -82,6 +82,9 @@ jobs:
       - name: Prisma generate
         run: pnpm --filter @opshub/api exec prisma generate
 
+      - name: Build shared contracts (types needed by both apps)
+        run: pnpm --filter @opshub/contracts build
+
       - name: Typecheck
         run: pnpm -r typecheck
 
@@ -99,6 +102,10 @@ jobs:
 
       - name: API e2e tests
         run: pnpm --filter @opshub/api test:e2e
+
+      # contracts ships compiled JS and both apps import it, so it builds first.
+      - name: Build shared contracts
+        run: pnpm --filter @opshub/contracts build
 
       - name: Build API
         run: pnpm --filter @opshub/api build

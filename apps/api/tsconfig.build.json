@@ -1,0 +1,18 @@
+{
+  // `nest build` picks this up automatically when it exists.
+  //
+  // The base tsconfig deliberately includes prisma/ and test/ so the seed
+  // script and the specs are typechecked. That widens the inferred rootDir to
+  // the package root, so the emitted entrypoint landed at dist/src/main.js
+  // while package.json's `start` pointed at dist/main.js — production start was
+  // broken. Pinning rootDir to src keeps the build output flat and predictable,
+  // and keeps tests and the seed script out of the shipped image.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "prisma", "**/*.spec.ts"]
+}
