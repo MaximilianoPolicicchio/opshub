@@ -1,9 +1,9 @@
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
-import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { ConfigModule } from "./config/config.module";
 import { PrismaModule } from "./prisma/prisma.module";
-import { JwtAuthGuard, WorkspaceGuard, RolesGuard } from "./common/guards";
+import { JwtAuthGuard, WorkspaceGuard, RolesGuard, ConditionalThrottlerGuard } from "./common/guards";
 
 import { AuthModule } from "./modules/auth/auth.module";
 import { UsersModule } from "./modules/users/users.module";
@@ -44,7 +44,7 @@ import { SystemModule } from "./modules/system/system.module";
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: WorkspaceGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: ConditionalThrottlerGuard },
   ],
 })
 export class AppModule {}

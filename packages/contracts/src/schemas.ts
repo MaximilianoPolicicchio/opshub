@@ -11,29 +11,129 @@ import {
   ProjectTemplateKey,
 } from "./enums";
 
+/**
+ * Emails are the login identity, so they are normalised before they ever reach
+ * the database: trimmed and lowercased. Without this, `Demo@x.com` and
+ * `demo@x.com` register as two separate accounts and one of them can never log
+ * in with the password the user thinks they set.
+ */
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email()
+  .max(254); // RFC 5321 practical maximum
+
+/**
+ * A deliberately small password policy: length does most of the work, and a
+ * short denylist blocks the handful of passwords that show up in every
+ * credential-stuffing list. No composition rules (upper+digit+symbol) — they
+ * push users toward `Password1!` without adding real entropy.
+ */
+const COMMON_PASSWORDS = new Set([
+  "password",
+  "password1",
+  "password123",
+  "passw0rd",
+  "12345678",
+  "123456789",
+  "1234567890",
+  "qwertyuiop",
+  "letmein123",
+  "iloveyou1",
+  "admin12345",
+  "welcome123",
+  "changeme123",
+]);
+
+export const passwordSchema = z
+  .string()
+  .min(10, "Password must be at least 10 characters")
+  .max(200, "Password must be at most 200 characters")
+  .refine((v) => !COMMON_PASSWORDS.has(v.toLowerCase()), {
+    message: "This password is too common",
+  })
+  .refine((v) => v.trim().length > 0, { message: "Password cannot be blank" });
+
+/** Human-facing display name: real content, not just whitespace. */
+export const displayNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Cannot be empty")
+  .max(120)
+  // Control characters break log lines and terminal output. Checked by code
+  // point rather than a regex literal so the source file stays plain ASCII.
+  .refine((v) => ![...v].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127), {
+    message: "Contains control characters",
+  });
+
+/**
+ * IANA timezone, validated by asking the runtime rather than shipping a list
+ * that goes stale every time a country changes its rules.
+ */
+export const timezoneSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .refine(
+    (tz) => {
+      try {
+        new Intl.DateTimeFormat("en-US", { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Must be a valid IANA timezone, e.g. America/Argentina/Buenos_Aires" },
+  );
+
+/** Opaque 64-byte token; bounded so a huge body cannot reach the hash step. */
+export const refreshTokenSchema = z.string().trim().min(1, "Refresh token is required").max(512);
+
 export const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(10),
-  name: z.string().min(1).max(120),
-  workspaceName: z.string().min(1).max(120),
+  email: emailSchema,
+  password: passwordSchema,
+  name: displayNameSchema,
+  workspaceName: displayNameSchema,
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
 export const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  email: emailSchema,
+  // Never apply the password policy on login: it would reject legacy passwords
+  // and, worse, let an attacker distinguish "wrong shape" from "wrong password".
+  password: z.string().min(1, "Password is required").max(200),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
 export const refreshSchema = z.object({
-  refreshToken: z.string().min(1),
+  refreshToken: refreshTokenSchema,
 });
 export type RefreshInput = z.infer<typeof refreshSchema>;
 
-export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1),
-  newPassword: z.string().min(10),
-});
+export const logoutSchema = refreshSchema;
+export type LogoutInput = z.infer<typeof logoutSchema>;
+
+export const updateProfileSchema = z
+  .object({
+    name: displayNameSchema.optional(),
+    timezone: timezoneSchema.optional(),
+  })
+  .refine((v) => v.name !== undefined || v.timezone !== undefined, {
+    message: "Provide at least one field to update",
+  });
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required").max(200),
+    newPassword: passwordSchema,
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, {
+    message: "New password must be different from the current one",
+    path: ["newPassword"],
+  });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 export const projectLinksSchema = z.object({
