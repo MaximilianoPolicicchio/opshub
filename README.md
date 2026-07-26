@@ -95,11 +95,24 @@ calculation, recurrence date math, the actionable-task predicate, overlap
 detection, dependency-cycle detection. Prisma-backed services wrap them. This is
 why the rules are unit-testable without a database.
 
-**Tenancy is enforced twice.** Every tenant-owned row carries a denormalized
-`workspaceId`, and a Prisma client extension injects the filter automatically.
-Every lookup by id is `findFirst({ id, workspaceId })`, never
-`findUnique({ id })`, so an id from another workspace returns 404 rather than
-403 — no existence disclosure.
+**Tenancy is enforced explicitly, and a test proves it.** Every tenant-owned row
+carries a denormalized `workspaceId`, and every query filters on it in the
+service that owns the model — there is no magic interceptor doing it behind your
+back.
+
+Reads use `findFirst({ id, workspaceId })`, never `findUnique({ id })`, so an id
+from another workspace returns 404 rather than 403: no existence disclosure.
+
+Writes are the part that usually goes wrong. Checking ownership and then
+mutating by id alone is a TOCTOU pattern — two statements, where the mutation
+would cross a tenant boundary the moment the check is refactored away. Prisma 5
+accepts extra non-unique filters alongside a unique field, so every `update` and
+`delete` carries `where: { id, workspaceId }` and is authoritative on its own; a
+foreign id raises `P2025` instead of quietly succeeding.
+
+Because a missing property in a `where` clause is exactly the kind of thing code
+review misses, [`tenant-scoping.arch.spec.ts`](apps/api/src/prisma/tenant-scoping.arch.spec.ts)
+fails the build if any mutation on a tenant-owned model is written without it.
 
 ### Data model
 
@@ -475,4 +488,8 @@ Honest scope boundaries for v1:
 - **Soft delete without a restore UI.** `archivedAt` exists on Project, Task, and
   Automation, but v1 only archives.
 - **No Postgres row-level security.** Isolation is enforced in the application
-  layer through the Prisma extension. RLS is the natural next hardening step.
+  layer: every query filters on `workspaceId`, every mutation is scoped in its
+  own `where`, and an architectural test fails the build if a write is written
+  without it. That is defence in the code, not in the database — a raw SQL
+  console or a future service that bypasses these helpers is not covered. RLS is
+  the natural next hardening step.

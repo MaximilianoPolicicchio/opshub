@@ -50,7 +50,7 @@ export class AutomationsService {
     const existing = await this.prisma.automation.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Automation not found" });
     return this.prisma.automation.update({
-      where: { id },
+      where: { id, workspaceId },
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
@@ -63,7 +63,7 @@ export class AutomationsService {
   async remove(id: string, workspaceId: string) {
     const existing = await this.prisma.automation.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Automation not found" });
-    await this.prisma.automation.update({ where: { id }, data: { archivedAt: new Date() } });
+    await this.prisma.automation.update({ where: { id, workspaceId }, data: { archivedAt: new Date() } });
   }
 
   async simulate(id: string, workspaceId: string) {

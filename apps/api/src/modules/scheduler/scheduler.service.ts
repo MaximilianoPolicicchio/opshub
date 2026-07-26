@@ -74,7 +74,10 @@ export class SchedulerService {
       });
       const isBlocked = openBlockerCount > 0;
       if (isBlocked !== task.isBlocked) {
-        await this.prisma.task.update({ where: { id: task.id }, data: { isBlocked } });
+        await this.prisma.task.update({
+          where: { id: task.id, workspaceId: task.workspaceId },
+          data: { isBlocked },
+        });
       }
     }
 

@@ -150,7 +150,7 @@ export class TasksService {
       (HIGH_PRIORITIES.includes(existing.priority) !== HIGH_PRIORITIES.includes(input.priority!));
 
     const updated = await this.prisma.task.update({
-      where: { id },
+      where: { id, workspaceId },
       data: {
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
@@ -215,7 +215,7 @@ export class TasksService {
       }
 
       const updated = await tx.task.update({
-        where: { id },
+        where: { id, workspaceId },
         data: {
           status,
           ...(status === "DONE" ? { completedAt: new Date() } : {}),
@@ -269,20 +269,20 @@ export class TasksService {
   async updatePosition(id: string, workspaceId: string, status: TaskStatus, sortOrder: number) {
     const existing = await this.prisma.task.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Task not found" });
-    return this.prisma.task.update({ where: { id }, data: { status, sortOrder } });
+    return this.prisma.task.update({ where: { id, workspaceId }, data: { status, sortOrder } });
   }
 
   async remove(id: string, workspaceId: string) {
     const existing = await this.prisma.task.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Task not found" });
-    await this.prisma.task.update({ where: { id }, data: { archivedAt: new Date() } });
+    await this.prisma.task.update({ where: { id, workspaceId }, data: { archivedAt: new Date() } });
     await this.health.evaluate(existing.projectId, workspaceId);
   }
 
   async surface(id: string, workspaceId: string, date: string) {
     const existing = await this.prisma.task.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Task not found" });
-    return this.prisma.task.update({ where: { id }, data: { surfacedForDate: new Date(date) } });
+    return this.prisma.task.update({ where: { id, workspaceId }, data: { surfacedForDate: new Date(date) } });
   }
 
   // --- Dependencies -------------------------------------------------------
@@ -320,7 +320,7 @@ export class TasksService {
   async removeDependency(taskId: string, depId: string, workspaceId: string) {
     const dep = await this.prisma.taskDependency.findFirst({ where: { id: depId, taskId, workspaceId } });
     if (!dep) throw new NotFoundException({ code: "NOT_FOUND", message: "Dependency not found" });
-    await this.prisma.taskDependency.delete({ where: { id: depId } });
+    await this.prisma.taskDependency.delete({ where: { id: depId, workspaceId } });
     const task = await this.prisma.task.findFirst({ where: { id: taskId, workspaceId } });
     await this.recomputeBlocked(this.prisma, taskId, workspaceId, null);
     if (task) await this.health.evaluate(task.projectId, workspaceId);
@@ -337,7 +337,7 @@ export class TasksService {
   async removeLink(taskId: string, linkId: string, workspaceId: string) {
     const link = await this.prisma.taskLink.findFirst({ where: { id: linkId, taskId, workspaceId } });
     if (!link) throw new NotFoundException({ code: "NOT_FOUND", message: "Link not found" });
-    await this.prisma.taskLink.delete({ where: { id: linkId } });
+    await this.prisma.taskLink.delete({ where: { id: linkId, workspaceId } });
   }
 
   // --- Today -----------------------------------------------------------
@@ -429,7 +429,7 @@ export class TasksService {
     const isBlocked = openBlockerCount > 0;
     if (isBlocked === task.isBlocked) return;
 
-    await tx.task.update({ where: { id: taskId }, data: { isBlocked } });
+    await tx.task.update({ where: { id: taskId, workspaceId }, data: { isBlocked } });
     await this.activity.record(
       {
         workspaceId,

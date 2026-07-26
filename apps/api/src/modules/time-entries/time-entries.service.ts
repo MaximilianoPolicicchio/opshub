@@ -140,11 +140,17 @@ export class TimeEntriesService {
     return stopped;
   }
 
-  private async stopEntry(tx: Prisma.TransactionClient, entry: { id: string; startTime: Date }, endTime: Date) {
+  private async stopEntry(
+    tx: Prisma.TransactionClient,
+    // workspaceId is required so the UPDATE itself is workspace-scoped rather
+    // than trusting the caller's earlier lookup.
+    entry: { id: string; startTime: Date; workspaceId: string },
+    endTime: Date,
+  ) {
     const durationMinutes = computeDurationMinutes(entry.startTime, endTime);
     try {
       return await tx.timeEntry.update({
-        where: { id: entry.id },
+        where: { id: entry.id, workspaceId: entry.workspaceId },
         data: { endTime, durationMinutes },
       });
     } catch (err: any) {
@@ -261,7 +267,7 @@ export class TimeEntriesService {
     let updated;
     try {
       updated = await this.prisma.timeEntry.update({
-        where: { id },
+        where: { id, workspaceId },
         data: {
           startTime,
           endTime,
@@ -291,7 +297,7 @@ export class TimeEntriesService {
     if (role === "MEMBER" && existing.userId !== userId) {
       throw new ConflictException({ code: "FORBIDDEN", message: "Cannot delete another user's time entry" });
     }
-    await this.prisma.timeEntry.delete({ where: { id } });
+    await this.prisma.timeEntry.delete({ where: { id, workspaceId } });
     // Deleting time never resets alerts (they're historical), but we still
     // re-run evaluateAlerts in case burn crossed a NEW threshold going down
     // is a no-op by design (evaluateAlerts only ever adds rows).

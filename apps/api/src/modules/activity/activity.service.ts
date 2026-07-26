@@ -44,7 +44,7 @@ export class ActivityService {
 
     if (input.projectId) {
       await tx.project.update({
-        where: { id: input.projectId },
+        where: { id: input.projectId, workspaceId: input.workspaceId },
         data: { lastActivityAt: new Date() },
       });
     }

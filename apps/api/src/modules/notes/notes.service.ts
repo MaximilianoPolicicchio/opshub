@@ -37,7 +37,7 @@ export class NotesService {
     const existing = await this.prisma.note.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Note not found" });
     return this.prisma.note.update({
-      where: { id },
+      where: { id, workspaceId },
       data: {
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.body !== undefined ? { body: input.body } : {}),
@@ -49,6 +49,6 @@ export class NotesService {
   async remove(id: string, workspaceId: string) {
     const existing = await this.prisma.note.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Note not found" });
-    await this.prisma.note.delete({ where: { id } });
+    await this.prisma.note.delete({ where: { id, workspaceId } });
   }
 }

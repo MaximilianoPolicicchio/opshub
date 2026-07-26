@@ -60,4 +60,102 @@ describe("Workspace isolation (e2e)", () => {
     const ids = listRes.body.data.rows.map((p: any) => p.id);
     expect(ids).not.toContain(userB.projectId);
   });
+
+  // Reads leaking is the obvious failure; a cross-tenant *write* silently
+  // succeeding is the expensive one. These assert both the status code and that
+  // the target row is genuinely untouched afterwards.
+
+  it("user B cannot update user A's project, and the project is unchanged", async () => {
+    const userA = await registerUserWithProject();
+    const userB = await registerUserWithProject();
+
+    const before = await request(app.getHttpServer())
+      .get(`/api/v1/projects/${userA.projectId}`)
+      .set("Authorization", `Bearer ${userA.accessToken}`)
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/projects/${userA.projectId}`)
+      .set("Authorization", `Bearer ${userB.accessToken}`)
+      .send({ name: "Owned by B", status: "ARCHIVED" })
+      .expect(404);
+
+    const after = await request(app.getHttpServer())
+      .get(`/api/v1/projects/${userA.projectId}`)
+      .set("Authorization", `Bearer ${userA.accessToken}`)
+      .expect(200);
+
+    expect(after.body.data.name).toBe(before.body.data.name);
+    expect(after.body.data.status).toBe(before.body.data.status);
+  });
+
+  it("user B cannot archive user A's project", async () => {
+    const userA = await registerUserWithProject();
+    const userB = await registerUserWithProject();
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/projects/${userA.projectId}`)
+      .set("Authorization", `Bearer ${userB.accessToken}`)
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/projects/${userA.projectId}`)
+      .set("Authorization", `Bearer ${userA.accessToken}`)
+      .expect(200);
+  });
+
+  it("user B cannot attach a task to a project in user A's workspace", async () => {
+    const userA = await registerUserWithProject();
+    const userB = await registerUserWithProject();
+
+    await request(app.getHttpServer())
+      .post("/api/v1/tasks")
+      .set("Authorization", `Bearer ${userB.accessToken}`)
+      .send({ projectId: userA.projectId, title: "Planted by B" })
+      .expect(404);
+
+    const tasks = await request(app.getHttpServer())
+      .get(`/api/v1/tasks?projectId=${userA.projectId}`)
+      .set("Authorization", `Bearer ${userA.accessToken}`)
+      .expect(200);
+
+    expect(tasks.body.data.some((t: any) => t.title === "Planted by B")).toBe(false);
+  });
+
+  it("user B cannot update a task in user A's workspace", async () => {
+    const userA = await registerUserWithProject();
+    const userB = await registerUserWithProject();
+
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/tasks")
+      .set("Authorization", `Bearer ${userA.accessToken}`)
+      .send({ projectId: userA.projectId, title: "A's task", priority: "LOW" })
+      .expect(201);
+    const taskId = created.body.data.id as string;
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/tasks/${taskId}`)
+      .set("Authorization", `Bearer ${userB.accessToken}`)
+      .send({ title: "Hijacked", priority: "CRITICAL" })
+      .expect(404);
+
+    const after = await request(app.getHttpServer())
+      .get(`/api/v1/tasks/${taskId}`)
+      .set("Authorization", `Bearer ${userA.accessToken}`)
+      .expect(200);
+
+    expect(after.body.data.title).toBe("A's task");
+    expect(after.body.data.priority).toBe("LOW");
+  });
+
+  it("user B cannot write a budget onto user A's project", async () => {
+    const userA = await registerUserWithProject();
+    const userB = await registerUserWithProject();
+
+    await request(app.getHttpServer())
+      .put(`/api/v1/projects/${userA.projectId}/budget`)
+      .set("Authorization", `Bearer ${userB.accessToken}`)
+      .send({ billingModel: "HOURLY", currency: "USD", budgetAmount: 1, hourlyRate: 1, estimatedHours: 1 })
+      .expect(404);
+  });
 });

@@ -85,13 +85,13 @@ export class BudgetAlertsService {
     if (!budget) return;
     const burn = await this.calculator.computeBurn(budget);
     await this.prisma.budgetAlert.deleteMany({
-      where: { projectBudgetId: budget.id, threshold: { gt: burn.burnPercent.toNumber() } },
+      where: { projectBudgetId: budget.id, workspaceId, threshold: { gt: burn.burnPercent.toNumber() } },
     });
   }
 
   async acknowledge(alertId: string, workspaceId: string) {
     const alert = await this.prisma.budgetAlert.findFirst({ where: { id: alertId, workspaceId } });
     if (!alert) return null;
-    return this.prisma.budgetAlert.update({ where: { id: alertId }, data: { acknowledgedAt: new Date() } });
+    return this.prisma.budgetAlert.update({ where: { id: alertId, workspaceId }, data: { acknowledgedAt: new Date() } });
   }
 }

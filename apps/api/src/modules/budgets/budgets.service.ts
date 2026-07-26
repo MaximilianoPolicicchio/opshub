@@ -50,7 +50,7 @@ export class BudgetsService {
     };
 
     const budget = existing
-      ? await this.prisma.projectBudget.update({ where: { id: existing.id }, data })
+      ? await this.prisma.projectBudget.update({ where: { id: existing.id, workspaceId }, data })
       : await this.prisma.projectBudget.create({ data: { workspaceId, projectId, ...data } });
 
     if (!existing) {
@@ -75,7 +75,7 @@ export class BudgetsService {
   async remove(projectId: string, workspaceId: string) {
     const existing = await this.prisma.projectBudget.findFirst({ where: { projectId, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Budget not found" });
-    await this.prisma.projectBudget.delete({ where: { id: existing.id } });
+    await this.prisma.projectBudget.delete({ where: { id: existing.id, workspaceId } });
   }
 
   async listAlerts(projectId: string, workspaceId: string) {

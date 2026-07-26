@@ -1,27 +1,29 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 
-// Models that carry a denormalized workspaceId and must always be scoped.
-const TENANT_MODELS = new Set([
-  "Project",
-  "ProjectTemplate",
-  "Milestone",
-  "Task",
-  "TaskDependency",
-  "TaskLink",
-  "Note",
-  "TimeEntry",
-  "ProjectBudget",
-  "BudgetAlert",
-  "Automation",
-  "AutomationRun",
-  "ActivityEvent",
-]);
-
+/**
+ * Multi-tenant isolation note.
+ *
+ * An earlier version of this file exposed a `forWorkspace(workspaceId)` Prisma
+ * client extension that injected `where.workspaceId` on tenant-owned models. It
+ * was never adopted by any service, which made it worse than useless: the
+ * README described it as an active layer of defence while it was dead code.
+ *
+ * Isolation is now explicit and uniform instead. Every service filters on
+ * `workspaceId`, reads use `findFirst({ id, workspaceId })` so foreign ids 404
+ * rather than 403, and every `update`/`delete` carries `workspaceId` in its own
+ * `where` so the mutation is authoritative rather than trusting a prior check.
+ * `tenant-scoping.arch.spec.ts` fails the build if a write is added without it.
+ *
+ * The extension was dropped rather than wired up because making it genuinely
+ * transparent requires an AsyncLocalStorage request context and returning an
+ * extended client that every service must remember to use — the same
+ * "remember to do the right thing" failure mode as explicit filtering, but
+ * hidden. Explicit scoping plus a test that cannot be forgotten is the smaller,
+ * more auditable mechanism. Postgres RLS is the real next step.
+ */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(PrismaService.name);
-
   async onModuleInit() {
     await this.$connect();
   }
@@ -29,70 +31,4 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   async onModuleDestroy() {
     await this.$disconnect();
   }
-
-  /**
-   * Returns a Prisma client extension scoped to a single workspace: every
-   * findMany/findFirst/update/updateMany/delete/deleteMany/count on a
-   * tenant-owned model gets `where.workspaceId` injected, and `create` gets
-   * `data.workspaceId` injected. This is defense-in-depth on top of every
-   * service explicitly filtering by workspaceId in its own queries.
-   */
-  forWorkspace(workspaceId: string) {
-    return this.$extends({
-      query: {
-        $allModels: {
-          async findMany({ model, args, query }) {
-            if (TENANT_MODELS.has(model)) {
-              args.where = { ...(args.where ?? {}), workspaceId };
-            }
-            return query(args);
-          },
-          async findFirst({ model, args, query }) {
-            if (TENANT_MODELS.has(model)) {
-              args.where = { ...(args.where ?? {}), workspaceId };
-            }
-            return query(args);
-          },
-          async count({ model, args, query }) {
-            if (TENANT_MODELS.has(model)) {
-              args.where = { ...(args.where ?? {}), workspaceId };
-            }
-            return query(args);
-          },
-          async update({ model, args, query }) {
-            if (TENANT_MODELS.has(model)) {
-              args.where = { ...(args.where ?? {}), workspaceId } as typeof args.where;
-            }
-            return query(args);
-          },
-          async updateMany({ model, args, query }) {
-            if (TENANT_MODELS.has(model)) {
-              args.where = { ...(args.where ?? {}), workspaceId };
-            }
-            return query(args);
-          },
-          async delete({ model, args, query }) {
-            if (TENANT_MODELS.has(model)) {
-              args.where = { ...(args.where ?? {}), workspaceId } as typeof args.where;
-            }
-            return query(args);
-          },
-          async deleteMany({ model, args, query }) {
-            if (TENANT_MODELS.has(model)) {
-              args.where = { ...(args.where ?? {}), workspaceId };
-            }
-            return query(args);
-          },
-          async create({ model, args, query }) {
-            if (TENANT_MODELS.has(model)) {
-              args.data = { ...(args.data ?? {}), workspaceId } as typeof args.data;
-            }
-            return query(args);
-          },
-        },
-      },
-    });
-  }
 }
-
-export type ScopedPrismaClient = ReturnType<PrismaService["forWorkspace"]>;

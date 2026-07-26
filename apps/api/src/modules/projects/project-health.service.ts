@@ -86,7 +86,7 @@ export class ProjectHealthService implements IProjectHealthEvaluator {
     if (result.health === project.health) {
       // Still refresh reason/evaluatedAt for observability, but no event.
       await tx.project.update({
-        where: { id: projectId },
+        where: { id: projectId, workspaceId },
         data: { healthReason: result.reason, healthEvaluatedAt: now },
       });
       return;
@@ -94,7 +94,7 @@ export class ProjectHealthService implements IProjectHealthEvaluator {
 
     const from = project.health;
     await tx.project.update({
-      where: { id: projectId },
+      where: { id: projectId, workspaceId },
       data: { health: result.health, healthReason: result.reason, healthEvaluatedAt: now },
     });
 

@@ -320,7 +320,7 @@ export class ProjectsService {
     const statusChanged = input.status !== undefined && input.status !== existing.status;
 
     const updated = await this.prisma.project.update({
-      where: { id },
+      where: { id, workspaceId },
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
@@ -356,7 +356,7 @@ export class ProjectsService {
     const existing = await this.prisma.project.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Project not found" });
     return this.prisma.project.update({
-      where: { id },
+      where: { id, workspaceId },
       data: { archivedAt: new Date(), status: "ARCHIVED" },
     });
   }
@@ -365,7 +365,7 @@ export class ProjectsService {
     const existing = await this.prisma.project.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Project not found" });
     return this.prisma.project.update({
-      where: { id },
+      where: { id, workspaceId },
       data: { archivedAt: null, status: "ACTIVE" },
     });
   }

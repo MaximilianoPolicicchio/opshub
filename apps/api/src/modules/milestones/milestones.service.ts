@@ -45,7 +45,7 @@ export class MilestonesService {
     const completing = input.status === "DONE" && existing.status !== "DONE";
 
     const updated = await this.prisma.milestone.update({
-      where: { id },
+      where: { id, workspaceId },
       data: {
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
@@ -73,6 +73,6 @@ export class MilestonesService {
   async remove(id: string, workspaceId: string) {
     const existing = await this.prisma.milestone.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException({ code: "NOT_FOUND", message: "Milestone not found" });
-    await this.prisma.milestone.delete({ where: { id } });
+    await this.prisma.milestone.delete({ where: { id, workspaceId } });
   }
 }

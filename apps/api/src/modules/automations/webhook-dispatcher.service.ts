@@ -261,7 +261,10 @@ export class WebhookDispatcherService {
           dedupeKey,
         },
       });
-      await this.prisma.automation.update({ where: { id: automation.id }, data: { lastRunAt: new Date() } });
+      await this.prisma.automation.update({
+        where: { id: automation.id, workspaceId: automation.workspaceId },
+        data: { lastRunAt: new Date() },
+      });
       return run;
     } catch (err: any) {
       // Unique violation on (automationId, dedupeKey) == "already fired today"; drop silently.
