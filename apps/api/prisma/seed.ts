@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 import { PrismaClient, Priority, TaskCategory, TaskStatus, ActivityType } from "@prisma/client";
-import * as bcrypt from "bcrypt";
+import * as bcrypt from "bcryptjs";
 import { calculateBudgetBurn } from "../src/modules/budgets/budget-calculator.logic";
 import { evaluateProjectHealth } from "../src/modules/projects/project-health.logic";
 
