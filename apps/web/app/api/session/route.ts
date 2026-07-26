@@ -10,10 +10,22 @@ const REFRESH_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days, matches API refre
  * exchanges it with the real API. See PROJECT_PLAN.md §4 / §5.
  */
 
+/**
+ * `secure` defaults to on in production, which is correct behind HTTPS but
+ * silently breaks a production build served over plain http://localhost — the
+ * cookie is set and never sent back, so every reload looks like a logged-out
+ * user. COOKIE_SECURE exists for exactly that case (local production runs and
+ * browser tests). Unset, the safe default applies.
+ */
+const COOKIE_SECURE =
+  process.env.COOKIE_SECURE !== undefined
+    ? process.env.COOKIE_SECURE === "true"
+    : process.env.NODE_ENV === "production";
+
 function setRefreshCookie(response: NextResponse, refreshToken: string) {
   response.cookies.set(COOKIE_NAME, refreshToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: COOKIE_SECURE,
     sameSite: "lax",
     path: "/",
     maxAge: REFRESH_MAX_AGE_SECONDS,

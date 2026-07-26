@@ -11,7 +11,12 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "noEmit": false
+    "noEmit": false,
+    // Nest deletes outDir before building. With incremental output the stale
+    // .tsbuildinfo then reports everything as up to date, so tsc emits nothing
+    // and `pnpm build` silently produces no dist at all.
+    "incremental": false,
+    "composite": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test", "prisma", "**/*.spec.ts"]

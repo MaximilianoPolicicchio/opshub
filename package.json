@@ -20,9 +20,12 @@
     "docker:down": "docker compose --env-file .env.docker down",
     "docker:reset": "docker compose --env-file .env.docker down -v",
     "docker:seed": "docker compose --env-file .env.docker run --rm migrate npx prisma db seed",
-    "docker:logs": "docker compose --env-file .env.docker logs -f api web"
+    "docker:logs": "docker compose --env-file .env.docker logs -f api web",
+    "test:ui": "playwright test",
+    "test:ui:report": "playwright show-report"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "prettier": "^3.3.3",
     "typescript": "^5.5.4"
   },

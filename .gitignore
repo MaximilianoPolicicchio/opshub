@@ -15,3 +15,5 @@ apps/api/prisma/dev.db
 *.tsbuildinfo
 .env.docker
 packages/contracts/dist
+playwright-report/
+test-results/
