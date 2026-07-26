@@ -1,7 +1,68 @@
 # Project Command Center (OpsHub)
 
+[![CI](https://github.com/MaximilianoPolicicchio/opshub/actions/workflows/ci.yml/badge.svg)](https://github.com/MaximilianoPolicicchio/opshub/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
+![Node](https://img.shields.io/badge/node-20-339933)
+![Postgres](https://img.shields.io/badge/postgres-16-336791)
+
 An operations platform for a single product builder running several software
 products, client engagements, and automation systems at the same time.
+
+**Stack:** Next.js 14 · NestJS 10 · PostgreSQL 16 · Prisma 5 · TypeScript
+(strict) · pnpm workspaces · Playwright · GitHub Actions
+
+```
+pnpm install && pnpm db:migrate && pnpm db:seed   # then pnpm dev:api + pnpm dev:web
+```
+
+Sign in with `demo@opshub.local` / `DemoPassword123!`.
+
+> **Screenshots:** not yet captured. See [Screenshots](#screenshots) for the
+> shot list. Every figure in the seeded data is fabricated.
+
+### Engineering highlights
+
+Each of these is a decision with a trade-off behind it, not a checkbox:
+
+- **Multi-tenant isolation that a test enforces.** Every mutation on a
+  tenant-owned model carries `workspaceId` in its own `where`, so a cross-tenant
+  id raises `P2025` instead of relying on a preceding ownership check that a
+  refactor could drop. [`tenant-scoping.arch.spec.ts`](apps/api/src/prisma/tenant-scoping.arch.spec.ts)
+  fails the build if anyone writes one without it.
+- **Concurrency enforced by Postgres, not by hope.** One active timer per user
+  is a partial unique index; overlapping time entries are blocked by a GiST
+  exclusion constraint over `(userId, tstzrange)`. The application checks exist
+  only to turn driver errors into readable messages.
+- **Refresh-token rotation with reuse detection.** Tokens are stored hashed and
+  rotate on every use; replaying a rotated token revokes the whole family. The
+  access token never leaves memory, and the refresh token lives in an httpOnly
+  cookie.
+- **Business rules as pure functions.** Health evaluation, budget burn,
+  recurrence maths, the actionable-task predicate and overlap detection live in
+  dependency-free `*.logic.ts` files, unit-tested without a database. Money is
+  `Decimal` throughout — never a float.
+- **Idempotent automations.** Every webhook attempt — success, failure, or
+  simulated when no URL is configured — writes an `AutomationRun`, and a
+  `dedupeKey` stops the daily scan firing twice for the same entity.
+- **CI that actually runs the product.** Migrations, seed, 55 unit tests, 35 API
+  e2e tests against real Postgres, and a Playwright browser suite, on every push.
+
+### Architecture at a glance
+
+```mermaid
+flowchart LR
+  B[Browser] -->|TanStack Query| W[Next.js 14<br/>App Router]
+  W -->|httpOnly refresh cookie| S["/api/session<br/>route handler"]
+  S -->|token exchange| A
+  W -->|Bearer access token| A[NestJS 10 API<br/>/api/v1]
+  A -->|Prisma 5| D[(PostgreSQL 16)]
+  A -->|HMAC-signed webhook| N[n8n<br/>optional]
+  A -.->|no URL configured:<br/>simulated run| R[(AutomationRun<br/>history)]
+  N -.-> R
+  C[["@opshub/contracts<br/>shared Zod schemas"]] -.-> W
+  C -.-> A
+```
 
 It exists to answer, in a few seconds:
 
@@ -78,7 +139,7 @@ OpsHub/
 │  │  └─ src/
 │  │     ├─ common/   guards, decorators, pipes, filters, interceptors
 │  │     ├─ config/   Zod-validated environment
-│  │     ├─ prisma/   client + workspace-scoping extension
+│  │     ├─ prisma/   client + tenant-scoping architectural test
 │  │     └─ modules/  auth, users, workspaces, projects, tasks, milestones,
 │  │                  notes, time-entries, budgets, automations, activity,
 │  │                  weekly-review, scheduler, system
@@ -141,6 +202,33 @@ Full field-level detail and the reasoning behind each mechanism is in
 | Integration | Optional outbound n8n webhook, env-configured |
 
 ---
+
+## Run it with Docker
+
+Docker is optional — the native setup below needs no containers. If you do want
+the whole stack in one command:
+
+```bash
+cp .env.docker.example .env.docker
+docker compose up --build
+```
+
+Postgres, the API and the web app come up together; `btree_gist` is created and
+migrations are applied by a one-shot `migrate` service before the API starts.
+Then open http://localhost:3000.
+
+```bash
+pnpm docker:seed    # load the fabricated demo workspace
+```
+
+```bash
+pnpm docker:reset   # stop everything and drop the data volume
+```
+
+> **Unverified.** Docker is not installed on the machine these files were
+> authored on, so no image has actually been built. The Dockerfiles and
+> `compose.yaml` are reviewed and statically valid, but treat them as unproven
+> until someone runs the command above.
 
 ## Local setup
 
