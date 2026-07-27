@@ -6,6 +6,8 @@ The README is the 30-second version. This is the rest.
 | --- | --- |
 | [architecture.md](architecture.md) | Module boundaries, request path, data model, why the code is shaped this way |
 | [business-rules.md](business-rules.md) | The rules the product enforces, with the exact predicates and formulas |
+| [costs.md](costs.md) | Operating costs: model, monthly rules, and the (unbuilt) ingestion design |
+| [costs-handoff.md](costs-handoff.md) | Live status of the costs module — read this before working on it |
 | [automations.md](automations.md) | Webhook contract, payloads, signature verification, run recording |
 | [deployment.md](deployment.md) | Environment variables, migrations, health checks, rollback |
 | [security.md](security.md) | Threat model and the isolation mechanism in detail |

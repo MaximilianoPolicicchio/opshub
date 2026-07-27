@@ -13,6 +13,7 @@ and why, what it costs, and the condition that should trigger a rethink.
 | [0005](0005-direct-webhooks-deferring-outbox.md) | Direct webhook dispatch now, transactional outbox later | accepted |
 | [0006](0006-decimal-for-money.md) | Decimal for money, integer minutes for duration | accepted |
 | [0007](0007-dependency-severity-policy.md) | Fail CI on critical advisories only | accepted |
+| [0008](0008-costs-manual-first.md) | Operating costs: manual entry first, mailbox ingestion later | accepted |
 
 ## Writing a new one
 
