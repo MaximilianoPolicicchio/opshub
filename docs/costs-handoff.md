@@ -1,7 +1,10 @@
 # Operating Costs — handoff
 
-**Status: PARTIAL** — schema, contracts and API are implemented and verified
-against a live database. The web UI is not built yet.
+**Status: IMPLEMENTED (manual entry)** — schema, contracts, API, web UI and
+tests are done and verified against a live database and in a browser.
+
+Email/n8n ingestion is **designed only**. No endpoint exists. Nothing in the
+product claims otherwise.
 
 Keep this file current. It is the contract with whoever picks the work up next,
 including a future me. Update it after every phase, not at the end.
@@ -88,16 +91,26 @@ Phases are small and independently committable. Tick them off here as they land.
       enums, Zod schemas.
 - [x] **C. API** — vendors, subscriptions, expenses CRUD; review queue;
       monthly summary. Tenant-scoped, Zod-validated.
-- [ ] **D. Web** — Costs page: expenses list with filters, review queue,
+- [x] **D. Web** — Costs page: expenses list with filters, review queue,
       monthly summary, vendor and subscription management.
-- [ ] **E. Tests** — pure summary logic unit tests, API e2e including
+- [x] **E. Tests** — pure summary logic unit tests, API e2e including
       cross-tenant isolation.
-- [ ] **F. Ingestion (design only unless time allows)** — contract, payload,
-      HMAC scheme, `COST_INGESTION_SECRET`, exact steps to resume.
+- [x] **F. Ingestion — design only, deliberately.** Contract, payload, HMAC
+      scheme and resume steps are in `costs.md`. The Zod schema
+      (`ingestExpenseSchema`) exists in `packages/contracts` so the shape is
+      fixed and reviewable, but **no route consumes it**.
 
 ---
 
 ## Files created or modified
+
+Phase D + E:
+- `apps/web/app/(app)/costs/page.tsx` — summary, review queue, price increases,
+  per-project table, expense list with filters, subscriptions, and dialogs for
+  vendor / subscription / expense
+- `apps/web/hooks/useCosts.ts`, `apps/web/lib/types.ts`, `lib/query-keys.ts`
+- `apps/web/components/layout/Sidebar.tsx` — Costs nav entry
+- `apps/api/test/costs.e2e-spec.ts` — 11 tests, mostly cross-tenant isolation
 
 Phase B + C:
 - `apps/api/prisma/schema.prisma` — Vendor, Subscription, Expense + 4 enums,
@@ -143,6 +156,13 @@ Two constraints in it are load-bearing:
 | `pnpm --filter @opshub/api test` | pass (76 tests, incl. 21 new cost-summary) |
 | `pnpm --filter @opshub/api build` | pass |
 | manual API run against live Postgres | verified, see below |
+| `pnpm --filter @opshub/web typecheck` | pass |
+| `pnpm --filter @opshub/web lint` | pass |
+| `pnpm --filter @opshub/web build` | pass, `/costs` 9.36 kB |
+| `pnpm -r typecheck` / `pnpm -r lint` | pass |
+| `pnpm --filter @opshub/api test` | **76 passed**, 8 suites |
+| `pnpm --filter @opshub/api test:e2e` | **49 passed**, 8 suites |
+| browser check of `/costs` | verified, see below |
 
 Findings from inspection, so the next agent does not repeat it:
 
@@ -176,9 +196,26 @@ Logged in as the demo user and exercised the real endpoints:
   `expected 20.00 / actual 25.00 / difference 5.00`, the same figures per
   project, and a price increase of `20.00 -> 25.00 (25.00%)`.
 
+## Verified in a browser
+
+Signed in as the demo user against a production build:
+
+- `/costs` renders the monthly summary (expected 20.00 / actual 25.00 /
+  difference 5.00), the price increase (`Vercel Pro 20.00 -> 25.00, 25.00%`),
+  the per-project table and the expense list.
+- Logged a 12.50 expense with no project through the dialog. The total moved to
+  37.50, an **Unassigned** row appeared at 12.50, and the expense list updated —
+  so the write path and query invalidation both work.
+
 ## Errors and blockers
 
-None so far. One thing worth knowing: Prisma serialises `Decimal` to JSON as a
+**One real bug, found by the e2e suite and fixed.** `GET /costs/summary?month=`
+called `monthSchema.parse()` directly. `ZodValidationPipe` only covers the body,
+so a malformed month threw a raw `ZodError` and Nest returned **500** instead of
+400. Now parsed with `safeParse` and mapped to the standard 400 envelope; the
+test that caught it is kept.
+
+Otherwise none. One thing worth knowing: Prisma serialises `Decimal` to JSON as a
 bare number (`25`), while the summary endpoint returns pre-formatted strings
 (`"25.00"`). The UI should format amounts from list endpoints rather than
 printing them raw.
@@ -197,17 +234,27 @@ No new variables are required for the manual MVP.
 
 ## Next 3 exact steps
 
-1. Add `apps/web/hooks/useCosts.ts` (TanStack Query, following
-   `useMilestones.ts`) plus the cost types in `apps/web/lib/types.ts` and keys
-   in `lib/query-keys.ts`. **All cost list endpoints return bare arrays**, not
-   `{ rows }` — match the hook to that or the UI silently renders nothing.
-2. Build `apps/web/app/(app)/costs/page.tsx`: month picker, summary cards
-   (expected / actual / difference per currency), per-project table, price
-   increases, review queue, expense list with filters. Add the nav entry to
-   `components/layout/Sidebar.tsx`.
-3. Write `apps/api/test/costs.e2e-spec.ts` covering cross-tenant isolation for
-   vendors, subscriptions and expenses (404 on read *and* on write, target row
-   unchanged), following `workspace-isolation.e2e-spec.ts`.
+The manual MVP is complete. In priority order:
+
+1. **Seed demo cost data.** `apps/api/prisma/seed.ts` creates the four projects
+   but no vendors, subscriptions or expenses, so `/costs` is empty on a fresh
+   database and the feature looks unfinished. Add a handful of fabricated
+   subscriptions across the four projects, one deliberate price rise, and one
+   `PENDING_REVIEW` row so the review queue is visible. Keep it obviously fake,
+   like the rest of the seed.
+2. **Editing from the UI.** The API supports `PATCH` on subscriptions and
+   expenses, and the hooks (`useUpdateSubscription`, `useUpdateExpense`,
+   `useDeleteExpense`) are already written and unused. The page currently only
+   creates and reviews. Wire up edit and delete, and add a "raise the expected
+   amount to the charged amount" action on a flagged price increase — today the
+   user has to retype it.
+3. **The ingestion endpoint, only when manual entry becomes the bottleneck.**
+   Build `POST /costs/ingest` exactly as specified in `docs/costs.md`: HMAC over
+   the raw body with `COST_INGESTION_SECRET`, `ingestExpenseSchema` (already in
+   contracts), always `PENDING_REVIEW`, idempotent on
+   `(workspaceId, source, externalReference)` which the schema already enforces.
+   Add the env var to `.env.example` **in the same commit as the route**, never
+   before.
 
 ---
 

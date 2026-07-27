@@ -11,6 +11,7 @@ const NAV = [
   { href: "/projects", label: "Projects", icon: FolderIcon },
   { href: "/time", label: "Time", icon: ClockIcon },
   { href: "/financial", label: "Financial", icon: DollarIcon },
+  { href: "/costs", label: "Costs", icon: DollarIcon },
   { href: "/automations", label: "Automations", icon: BoltIcon },
   { href: "/weekly-review", label: "Weekly Review", icon: ChartIcon },
   { href: "/settings", label: "Settings", icon: GearIcon },

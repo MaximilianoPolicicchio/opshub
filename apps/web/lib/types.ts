@@ -335,3 +335,91 @@ export interface WeeklyReview {
   upcomingDue: { taskId: string; title: string; dueDate: string | null }[];
   automationFailures: number;
 }
+
+// --- Operating costs (docs/costs.md) ---
+
+export type CostFrequency = "MONTHLY" | "YEARLY";
+export type CostCategory =
+  | "HOSTING" | "SAAS" | "DOMAIN" | "INFRASTRUCTURE"
+  | "MARKETING" | "CONTRACTOR" | "HARDWARE" | "OTHER";
+export type ExpenseStatus = "PENDING_REVIEW" | "CONFIRMED" | "REJECTED" | "PAID";
+export type ExpenseSource = "MANUAL" | "N8N_IMPORT" | "FORWARDED_EMAIL";
+
+export interface Vendor {
+  id: string;
+  name: string;
+  normalizedName: string;
+  website: string | null;
+  notes: string | null;
+  archivedAt: string | null;
+  _count?: { subscriptions: number; expenses: number };
+}
+
+export interface Subscription {
+  id: string;
+  vendorId: string;
+  projectId: string | null;
+  name: string;
+  /** Prisma serialises Decimal as a bare number; format before display. */
+  expectedAmount: string | number;
+  currency: string;
+  frequency: CostFrequency;
+  category: CostCategory;
+  isActive: boolean;
+  nextChargeAt: string | null;
+  notes: string | null;
+  vendor?: { id: string; name: string };
+  project?: { id: string; name: string } | null;
+}
+
+export interface Expense {
+  id: string;
+  vendorId: string;
+  subscriptionId: string | null;
+  projectId: string | null;
+  amount: string | number;
+  currency: string;
+  incurredAt: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  status: ExpenseStatus;
+  source: ExpenseSource;
+  notes: string | null;
+  reviewedAt: string | null;
+  vendor?: { id: string; name: string };
+  project?: { id: string; name: string } | null;
+  subscription?: { id: string; name: string; expectedAmount: string | number; currency: string } | null;
+}
+
+/** Summary amounts are pre-formatted strings from the API, unlike list rows. */
+export interface CostGroupTotals {
+  key: string | null;
+  name: string;
+  currency: string;
+  expected: string;
+  actual: string;
+  difference: string;
+}
+
+export interface CostPriceIncrease {
+  subscriptionId: string;
+  subscriptionName: string;
+  vendorId: string;
+  vendorName: string;
+  currency: string;
+  expectedAmount: string;
+  chargedAmount: string;
+  increase: string;
+  increasePercent: string;
+}
+
+export interface MonthlyCostSummary {
+  month: string;
+  year: number;
+  byCurrency: { currency: string; expected: string; actual: string; difference: string }[];
+  byProject: CostGroupTotals[];
+  byVendor: CostGroupTotals[];
+  priceIncreases: CostPriceIncrease[];
+  pendingReviewCount: number;
+  unschedulableSubscriptionIds: string[];
+}

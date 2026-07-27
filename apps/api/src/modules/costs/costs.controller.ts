@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import {
   createVendorSchema,
   updateVendorSchema,
@@ -28,6 +28,24 @@ import { CostsService } from "./costs.service";
 @Controller()
 export class CostsController {
   constructor(private readonly costs: CostsService) {}
+
+  /**
+   * Query strings do not go through ZodValidationPipe, which only sees the
+   * body. Calling `schema.parse` directly throws a raw ZodError that Nest turns
+   * into a 500, so a mistyped month looked like a server fault. This maps it to
+   * the same 400 envelope every other validation failure produces.
+   */
+  private parseMonth(value: string): string {
+    const result = monthSchema.safeParse(value);
+    if (!result.success) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "Invalid month, expected YYYY-MM",
+        details: result.error.flatten(),
+      });
+    }
+    return result.data;
+  }
 
   // ---------------------------------------------------------------- vendors
 
@@ -109,7 +127,7 @@ export class CostsController {
   ) {
     // Validated rather than passed straight through: a malformed month would
     // otherwise reach parseMonth and surface as a 500.
-    const parsedMonth = month ? monthSchema.parse(month) : undefined;
+    const parsedMonth = month ? this.parseMonth(month) : undefined;
     return this.costs.listExpenses(workspaceId, {
       month: parsedMonth,
       projectId,
@@ -159,7 +177,7 @@ export class CostsController {
 
   @Get("costs/summary")
   summary(@WorkspaceId() workspaceId: string, @Query("month") month?: string) {
-    const target = month ? monthSchema.parse(month) : new Date().toISOString().slice(0, 7);
+    const target = month ? this.parseMonth(month) : new Date().toISOString().slice(0, 7);
     return this.costs.monthlySummary(workspaceId, target);
   }
 }
