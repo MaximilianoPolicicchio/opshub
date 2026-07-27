@@ -45,7 +45,7 @@ Each of these is a decision with a trade-off behind it, not a checkbox:
 - **Idempotent automations.** Every webhook attempt — success, failure, or
   simulated when no URL is configured — writes an `AutomationRun`, and a
   `dedupeKey` stops the daily scan firing twice for the same entity.
-- **CI that actually runs the product.** Migrations, seed, 55 unit tests, 35 API
+- **CI that actually runs the product.** Migrations, seed, 76 unit tests, 49 API
   e2e tests against real Postgres, and a Playwright browser suite, on every push.
   The audit gate fails on any high advisory; there are currently none.
 
@@ -59,7 +59,7 @@ Each of these is a decision with a trade-off behind it, not a checkbox:
 | [docs/automations.md](docs/automations.md) | Webhook contract and signature verification |
 | [docs/security.md](docs/security.md) | Threat model and isolation detail |
 | [docs/deployment.md](docs/deployment.md) | Env vars, migrations, rollback |
-| [docs/adr/](docs/adr/) | Seven decision records — what was rejected, and why |
+| [docs/adr/](docs/adr/) | Eight decision records — what was rejected, and why |
 
 ### Architecture at a glance
 
