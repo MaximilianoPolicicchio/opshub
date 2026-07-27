@@ -75,7 +75,10 @@ describe("Auth flow (e2e)", () => {
       .expect(201);
     expect(refreshRes.body.data.accessToken).toBeDefined();
 
-    // Reusing the old (now-revoked) token should fail.
-    await request(app.getHttpServer()).post("/api/v1/auth/refresh").send({ refreshToken: oldRefreshToken }).expect(401);
+    // An immediate replay is deliberately NOT rejected: it is indistinguishable
+    // from a page reload that raced the in-flight refresh, and treating it as
+    // theft logged real users out. The grace window and the theft case either
+    // side of it are covered by refresh-grace.e2e-spec.ts.
+    await request(app.getHttpServer()).post("/api/v1/auth/refresh").send({ refreshToken: oldRefreshToken }).expect(201);
   });
 });

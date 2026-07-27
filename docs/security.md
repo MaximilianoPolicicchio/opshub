@@ -96,8 +96,10 @@ Next.js major is outstanding. Reasoning and the tightening condition:
   Postgres by another path is uncovered.
 - **No CSRF token** on the session route. It relies on `SameSite=Lax` and the
   fact that the endpoint only exchanges a cookie the browser already holds.
-- **Session persistence fails against a production build** — open issue, tracked
-  as a `test.fixme`.
+- **Refresh reuse has a 10-second grace window** (`REFRESH_REUSE_GRACE_MS`), so
+  a replay inside it is served rather than detected. This exists because a
+  reload racing the boot refresh was revoking real users' sessions. See
+  [ADR 0004](adr/0004-refresh-token-rotation.md).
 - **Health endpoint is not split** into liveness and readiness, so a database
   blip can restart the process.
 - No 2FA, SSO, password reset, or account lockout.

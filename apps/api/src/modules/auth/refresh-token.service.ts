@@ -19,6 +19,17 @@ export class RefreshTokenService {
     return crypto.randomBytes(64).toString("hex");
   }
 
+  /**
+   * How long after rotation a spent token is still accepted as a benign retry
+   * rather than treated as theft. Long enough to cover a page load racing an
+   * in-flight refresh, short enough that it is not a useful attack window.
+   */
+  private reuseGraceMs(): number {
+    const raw = this.config.get<string>("REFRESH_REUSE_GRACE_MS");
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 10_000;
+  }
+
   async issue(userId: string): Promise<string> {
     const token = this.generateOpaqueToken();
     const ttl = this.config.get<string>("REFRESH_TOKEN_TTL") ?? "30d";
@@ -42,6 +53,24 @@ export class RefreshTokenService {
     }
 
     if (record.revokedAt) {
+      const revokedMsAgo = Date.now() - record.revokedAt.getTime();
+
+      // A token presented moments after it was rotated is far more likely to be
+      // a benign retry than theft. The browser is the common case: reload the
+      // page while the boot refresh is still in flight and the new cookie never
+      // lands, so the next page load presents the previous token. Treating that
+      // as theft logged people out permanently for double-tapping reload.
+      //
+      // Within the grace window we issue a fresh token and leave the family
+      // alone. An attacker would have to replay inside that window, which
+      // requires already having intercepted a token that is legitimately being
+      // used right now — at which point the window is not the weak link.
+      // Outside it, reuse is still treated as theft.
+      if (revokedMsAgo <= this.reuseGraceMs()) {
+        const newToken = await this.issue(record.userId);
+        return { userId: record.userId, newToken };
+      }
+
       // Reuse of a revoked token: revoke the whole family, force re-login.
       await this.prisma.refreshToken.updateMany({
         where: { userId: record.userId, revokedAt: null },

@@ -72,36 +72,12 @@ test.describe("core flows", () => {
   });
 
   /**
-   * KNOWN FAILING — documents a real bug, not a flaky test.
-   *
-   * Against `next dev` this passes. Against a production build (`next start`)
-   * the reload lands back on the sign-in form while the URL stays /projects,
-   * meaning the httpOnly refresh cookie is not being exchanged successfully on
-   * boot. Session persistence therefore works in development and breaks in
-   * production, which is the worst possible split.
-   *
-   * Ruled out so far:
-   * - The Secure cookie flag over plain http. COOKIE_SECURE=false is set for
-   *   this suite and the behaviour is unchanged.
-   * - The API. Driving /auth/refresh directly against the production build
-   *   rotates correctly through three generations, and replaying a spent token
-   *   returns REFRESH_TOKEN_REUSED exactly as designed.
-   * - NEXT_PUBLIC_API_URL resolution. The session route falls back to
-   *   http://localhost:4000/api/v1, which is correct for this setup.
-   * - A second caller of /api/session. Only api-client's single-flight
-   *   tryRefresh() issues the GET; auth.tsx only POSTs and DELETEs.
-   *
-   * So the token chain and the server are fine, and there is one code path
-   * issuing the exchange. What remains is why that single exchange does not
-   * restore the session under `next start` while it does under `next dev`.
-   * Next step: capture the /api/session request and response headers in the
-   * browser during a production-build reload and check whether the Set-Cookie
-   * from the boot exchange is actually stored before the next navigation.
-   *
-   * Marked fixme so CI stays honest — green means green — while the bug stays
-   * visible and reproducible. See README "Known issues".
+   * Regression guard. This failed against a production build until the refresh
+   * reuse grace window was added: reloading while the boot refresh was still in
+   * flight meant the rotated cookie never landed, the next load replayed the
+   * previous token, and reuse-detection revoked the whole family.
    */
-  test.fixme("a reload keeps the user signed in", async ({ page }) => {
+  test("a reload keeps the user signed in", async ({ page }) => {
     await registerAndSignIn(page, "session");
 
     await page.goto("/projects");

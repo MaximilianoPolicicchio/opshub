@@ -577,14 +577,6 @@ Honest scope boundaries for v1:
 - **No file attachments.**
 - **No real-time updates.** Data refreshes on navigation and query invalidation,
   not WebSockets.
-- **Known issue: session persistence differs between dev and production.**
-  Reloading the page keeps you signed in under `next dev`, but against a
-  production build the reload returns to the sign-in form while the URL stays
-  put — the httpOnly refresh cookie is not exchanged successfully on boot. It is
-  captured as a `test.fixme` in `e2e/core-flows.spec.ts` so it stays
-  reproducible rather than forgotten. The Secure-cookie-over-HTTP explanation
-  has been ruled out; a race between the boot refresh and an api-client 401
-  refresh tripping reuse-detection is the leading suspect.
 - **Browser coverage is a starting set.** Five Playwright specs cover the shell,
   project creation, weekly review, financial overview and sign-out. Flows that
   need more fixture setup — dependency gating in the UI, the timer, budget burn

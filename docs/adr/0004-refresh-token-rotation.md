@@ -43,14 +43,31 @@ is not obvious from reading either piece in isolation.
   over plain `http://localhost`, so `COOKIE_SECURE` exists as an explicit
   override for local runs and browser tests; unset, the safe default applies.
 
-**Open issue:** session persistence works under `next dev` and currently fails
-against a production build — the reload returns to the sign-in form. Secure-over-
-HTTP has been ruled out. A residual race between the boot refresh and an
-api-client 401 refresh tripping reuse detection is the leading suspect. Tracked
-as a `test.fixme` in `e2e/core-flows.spec.ts`.
+**Resolved: the reload race.** Rotation has a second failure mode beyond
+concurrent calls. Reload the page while the boot refresh is still in flight and
+the rotated cookie never lands, so the next page load replays the previous
+token — indistinguishable from theft, and the family was revoked. Users were
+logged out permanently for double-tapping reload. It reproduced only against a
+production build, because `next dev` is slow enough that the exchange completes
+first.
+
+The fix is a **grace window**: a token replayed within `REFRESH_REUSE_GRACE_MS`
+(default 10s) of its own rotation is treated as a benign retry and served a
+fresh token, leaving the family intact. Outside the window, reuse is still theft
+and still revokes everything.
+
+The trade-off is explicit: an attacker replaying a stolen token inside that
+window is not detected. To be there they must already have intercepted a token
+that is legitimately in use at that moment, so the window is not the weakest
+link in that scenario — whereas locking real users out of their own account was
+a guaranteed, everyday cost.
+
+Pinned by `refresh-grace.e2e-spec.ts` on both sides of the window, and by a
+browser regression test that reloads immediately after navigating.
 
 ## Revisit when
 
-The open issue is root-caused. If the race is confirmed, the options are to
-suppress reuse-detection within a short grace window for the same token, or to
-serialise refreshes server-side per user.
+The window needs to shrink under a stricter threat model, or a stolen-token
+alert is wanted. The stronger version records the successor on the revoked row
+and re-serves *that* token instead of minting a new one, which keeps the chain
+single-threaded — it needs a migration, which is why it was not done first.
