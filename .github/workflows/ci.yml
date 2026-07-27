@@ -103,10 +103,6 @@ jobs:
       - name: API e2e tests
         run: pnpm --filter @opshub/api test:e2e
 
-      # contracts ships compiled JS and both apps import it, so it builds first.
-      - name: Build shared contracts
-        run: pnpm --filter @opshub/contracts build
-
       - name: Build API
         run: pnpm --filter @opshub/api build
 
@@ -160,12 +156,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Gate on critical only. Highs are reported but do not fail the build:
-      # the ones currently outstanding are Next.js advisories that require a
-      # major upgrade, tracked separately. See docs/security.md for the policy
-      # and the current exception list.
-      - name: Audit production dependencies (fail on critical)
-        run: pnpm audit --prod --audit-level critical
+      # Tightened from `critical` to `high` once the Next.js 15 upgrade cleared
+      # the last outstanding high advisory. There are now no accepted
+      # exceptions, so a new high is genuinely new. See ADR 0007.
+      - name: Audit production dependencies (fail on high)
+        run: pnpm audit --prod --audit-level high
 
       - name: Report high and moderate advisories (non-blocking)
         if: always()

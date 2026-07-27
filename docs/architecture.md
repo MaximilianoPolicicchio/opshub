@@ -6,7 +6,7 @@ pnpm workspace monorepo. Docker is optional for local development.
 OpsHub/
 ├─ apps/
 │  ├─ api/            NestJS 10 + Prisma 5 + PostgreSQL 16
-│  └─ web/            Next.js 14 App Router + React + Tailwind
+│  └─ web/            Next.js 15 App Router + React + Tailwind
 └─ packages/
    └─ contracts/      Zod schemas + enums shared by both apps
 ```

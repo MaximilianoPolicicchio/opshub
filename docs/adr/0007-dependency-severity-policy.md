@@ -12,9 +12,14 @@ permanently red gate is worse than no gate — people stop reading it.
 
 ## Decision
 
-CI fails on **critical**. High and moderate are printed on every run but do not
-block. Each accepted exception is justified in the commit that introduces it,
-not in a file nobody rereads.
+CI originally failed on **critical** only, with high and moderate printed but
+non-blocking. **Updated 2026-07-26:** the Next.js 15 upgrade cleared the last
+outstanding high, so the gate is now `--audit-level high`. There are no accepted
+exceptions left, which means a new high advisory is genuinely new rather than
+noise — the condition this record set for tightening.
+
+Any exception that has to be accepted in future is justified in the commit that
+introduces it, not in a file nobody rereads.
 
 Fixes are applied in this order, and only as far as necessary:
 
@@ -44,12 +49,16 @@ would change it.
 ## Consequences
 
 - The gate is meaningful, so a red audit job means something new and bad.
-- Highs can accumulate silently if nobody reads the non-blocking output. The
-  mitigation is Dependabot raising PRs rather than relying on someone checking.
-- Result so far: 51 advisories (1 critical, 23 high) reduced to 27 (0 critical,
-  8 high), with the remainder scoped to one tracked upgrade.
+- Moderates are still only reported. They can accumulate unread, which is the
+  same weakness the original policy had one severity higher. Dependabot raising
+  PRs is the mitigation, rather than relying on someone reading CI output.
+- Result: 51 advisories (1 critical, 23 high) reduced to **6 (0 critical, 0
+  high)** — 5 moderate and 1 low remain, none with a fix available that does not
+  require another major.
 
 ## Revisit when
 
-The Next.js major lands. With the known highs cleared, the gate should tighten to
-`--audit-level high` so new highs block rather than accumulate.
+Moderates start hiding something that matters, or a high appears with no
+upstream fix. The latter is the real test of this policy: the answer is to
+document the exception in the commit that accepts it and set a condition for
+removing it, not to quietly lower the gate again.

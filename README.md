@@ -9,7 +9,7 @@
 An operations platform for a single product builder running several software
 products, client engagements, and automation systems at the same time.
 
-**Stack:** Next.js 14 · NestJS 10 · PostgreSQL 16 · Prisma 5 · TypeScript
+**Stack:** Next.js 15 · React 19 · NestJS 10 · PostgreSQL 16 · Prisma 5 · TypeScript
 (strict) · pnpm workspaces · Playwright · GitHub Actions
 
 ```
@@ -47,6 +47,7 @@ Each of these is a decision with a trade-off behind it, not a checkbox:
   `dedupeKey` stops the daily scan firing twice for the same entity.
 - **CI that actually runs the product.** Migrations, seed, 55 unit tests, 35 API
   e2e tests against real Postgres, and a Playwright browser suite, on every push.
+  The audit gate fails on any high advisory; there are currently none.
 
 ### Documentation
 
@@ -63,7 +64,7 @@ Each of these is a decision with a trade-off behind it, not a checkbox:
 
 ```mermaid
 flowchart LR
-  B[Browser] -->|TanStack Query| W[Next.js 14<br/>App Router]
+  B[Browser] -->|TanStack Query| W[Next.js 15<br/>App Router]
   W -->|httpOnly refresh cookie| S["/api/session<br/>route handler"]
   S -->|token exchange| A
   W -->|Bearer access token| A[NestJS 10 API<br/>/api/v1]
@@ -154,7 +155,7 @@ OpsHub/
 │  │     └─ modules/  auth, users, workspaces, projects, tasks, milestones,
 │  │                  notes, time-entries, budgets, automations, activity,
 │  │                  weekly-review, scheduler, system
-│  └─ web/            Next.js 14 App Router + React + TypeScript + Tailwind
+│  └─ web/            Next.js 15 App Router + React 19 + TypeScript + Tailwind
 └─ packages/
    └─ contracts/      Zod schemas + enums shared by web and api
 ```
@@ -203,7 +204,7 @@ Full field-level detail and the reasoning behind each mechanism is in
 | Layer | Choice |
 | --- | --- |
 | Package manager | pnpm workspaces, Node 20+ |
-| Web | Next.js 14 (App Router), React, TypeScript, Tailwind, TanStack Query |
+| Web | Next.js 15 (App Router), React 19, TypeScript, Tailwind, TanStack Query |
 | API | NestJS 10, TypeScript strict |
 | Database | PostgreSQL 16/17 + Prisma |
 | Auth | JWT access + rotating opaque refresh tokens, bcrypt |
@@ -577,7 +578,7 @@ Honest scope boundaries for v1:
 - **No file attachments.**
 - **No real-time updates.** Data refreshes on navigation and query invalidation,
   not WebSockets.
-- **Browser coverage is a starting set.** Five Playwright specs cover the shell,
+- **Browser coverage is a starting set.** Six Playwright specs cover the shell,
   project creation, weekly review, financial overview and sign-out. Flows that
   need more fixture setup — dependency gating in the UI, the timer, budget burn
   updating live, simulating an automation — are still only covered by the API
