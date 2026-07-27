@@ -90,6 +90,24 @@ CI fails on critical advisories; highs are reported but non-blocking while the
 Next.js major is outstanding. Reasoning and the tightening condition:
 [ADR 0007](adr/0007-dependency-severity-policy.md).
 
+## Operating costs and mailbox access
+
+The costs module records what is spent. It **does not read any mailbox**, and
+there is no Gmail OAuth anywhere in the codebase. That is a deliberate refusal,
+not a missing feature: OAuth on a personal inbox grants far more than invoice
+access — password resets included — for a convenience saving.
+
+Ingestion from a dedicated billing address is designed but unbuilt. When it is
+built it must sign with HMAC-SHA256 over the raw body, validate with Zod, be
+idempotent through the existing database constraint on
+`(workspaceId, source, externalReference)`, always create rows as
+`PENDING_REVIEW`, and store no email bodies, attachments or headers. See
+[costs.md](costs.md) and [ADR 0008](adr/0008-costs-manual-first.md).
+
+`status` and `source` on an expense are set by the server, so a caller cannot
+forge provenance or post an already-confirmed charge. Asserted in
+`costs.e2e-spec.ts`.
+
 ## Known gaps
 
 - **No row-level security.** Isolation is in application code. Anything reaching

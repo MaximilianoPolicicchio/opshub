@@ -55,6 +55,7 @@ Each of these is a decision with a trade-off behind it, not a checkbox:
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | Module boundaries, request path, data model |
 | [docs/business-rules.md](docs/business-rules.md) | Exact predicates and formulas |
+| [docs/costs.md](docs/costs.md) | Operating costs: model, monthly rules, ingestion design |
 | [docs/automations.md](docs/automations.md) | Webhook contract and signature verification |
 | [docs/security.md](docs/security.md) | Threat model and isolation detail |
 | [docs/deployment.md](docs/deployment.md) | Env vars, migrations, rollback |
@@ -123,6 +124,12 @@ section separate. Start a timer straight from a task.
 **Tracking work.** One timer runs at a time, enforced by a partial unique index
 in Postgres. Stop it with a short description, or add time manually. Overlapping
 entries for the same user are impossible — the database rejects them.
+
+**Watching costs.** **Costs** records vendors, recurring subscriptions and real
+expenses, then closes the month: expected versus actual per project, per vendor
+and per currency, with price rises flagged and unreviewed imports held out of
+the totals. Entry is manual — **no mailbox is connected**, by design
+([ADR 0008](docs/adr/0008-costs-manual-first.md)).
 
 **Watching money.** **Financial Overview** shows budget vs tracked value and
 estimated vs actual hours for every project, grouped by currency, with projects
