@@ -34,6 +34,9 @@ const TENANT_MODELS = [
   "automation",
   "automationRun",
   "activityEvent",
+  "vendor",
+  "subscription",
+  "expense",
 ];
 
 const MUTATIONS = ["update", "delete", "updateMany", "deleteMany"];

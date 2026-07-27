@@ -123,6 +123,35 @@ enum ActivityType {
   WEEKLY_REVIEW_GENERATED
 }
 
+enum CostFrequency {
+  MONTHLY
+  YEARLY
+}
+
+enum CostCategory {
+  HOSTING
+  SAAS
+  DOMAIN
+  INFRASTRUCTURE
+  MARKETING
+  CONTRACTOR
+  HARDWARE
+  OTHER
+}
+
+enum ExpenseStatus {
+  PENDING_REVIEW
+  CONFIRMED
+  REJECTED
+  PAID
+}
+
+enum ExpenseSource {
+  MANUAL
+  N8N_IMPORT
+  FORWARDED_EMAIL
+}
+
 // ---------------------------------------------------------------------------
 // Tenancy & identity
 // ---------------------------------------------------------------------------
@@ -137,11 +166,14 @@ model Workspace {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  memberships Membership[]
-  projects    Project[]
-  templates   ProjectTemplate[]
-  automations Automation[]
-  activity    ActivityEvent[]
+  memberships   Membership[]
+  projects      Project[]
+  templates     ProjectTemplate[]
+  automations   Automation[]
+  activity      ActivityEvent[]
+  vendors       Vendor[]
+  subscriptions Subscription[]
+  expenses      Expense[]
 }
 
 model User {
@@ -170,12 +202,12 @@ model Role {
 }
 
 model Membership {
-  id         String    @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
-  userId     String
-  roleId     String
-  invitedAt  DateTime  @default(now())
-  acceptedAt DateTime?
+  userId      String
+  roleId      String
+  invitedAt   DateTime  @default(now())
+  acceptedAt  DateTime?
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -225,15 +257,17 @@ model Project {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  template    ProjectTemplate? @relation(fields: [templateId], references: [id])
-  tasks       Task[]
-  milestones  Milestone[]
-  notes       Note[]
-  timeEntries TimeEntry[]
-  budget      ProjectBudget?
-  activity    ActivityEvent[]
-  automations Automation[]
+  workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  template      ProjectTemplate? @relation(fields: [templateId], references: [id])
+  tasks         Task[]
+  milestones    Milestone[]
+  notes         Note[]
+  timeEntries   TimeEntry[]
+  budget        ProjectBudget?
+  activity      ActivityEvent[]
+  automations   Automation[]
+  subscriptions Subscription[]
+  expenses      Expense[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status, health])
@@ -316,10 +350,10 @@ model Task {
   notes        Note[]
   timeEntries  TimeEntry[]
 
+  @@unique([recurrenceSeriesId, occurrenceIndex])
   @@index([workspaceId, projectId, status, sortOrder])
   @@index([workspaceId, status, dueDate])
   @@index([workspaceId, priority, dueDate])
-  @@unique([recurrenceSeriesId, occurrenceIndex])
 }
 
 model TaskDependency {
@@ -500,4 +534,98 @@ model ActivityEvent {
 
   @@index([workspaceId, createdAt])
   @@index([projectId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Operating costs
+//
+// Expected spend lives on Subscription, actual spend on Expense. That split is
+// what makes expected-vs-actual and price-rise detection possible at all.
+// See docs/costs.md and ADR 0008.
+// ---------------------------------------------------------------------------
+
+model Vendor {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  name           String
+  // Lowercased, trimmed, whitespace-collapsed. Unique per workspace so the same
+  // supplier cannot fragment into "Vercel", "vercel " and "VERCEL" — which would
+  // make price history meaningless and break matching for any future import.
+  normalizedName String
+  website        String?
+  notes          String?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+  expenses      Expense[]
+
+  @@unique([workspaceId, normalizedName])
+  @@index([workspaceId, archivedAt])
+}
+
+model Subscription {
+  id             String        @id @default(cuid())
+  workspaceId    String
+  vendorId       String
+  // Optional on purpose: shared infrastructure is genuinely not attributable to
+  // one project, and forcing a choice would invent precision.
+  projectId      String?
+  name           String
+  expectedAmount Decimal       @db.Decimal(12, 2)
+  currency       String        @default("USD")
+  frequency      CostFrequency @default(MONTHLY)
+  category       CostCategory  @default(SAAS)
+  isActive       Boolean       @default(true)
+  nextChargeAt   DateTime?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  vendor    Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  expenses  Expense[]
+
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, projectId])
+  @@index([vendorId])
+}
+
+model Expense {
+  id                String        @id @default(cuid())
+  workspaceId       String
+  vendorId          String
+  subscriptionId    String?
+  projectId         String?
+  amount            Decimal       @db.Decimal(12, 2)
+  currency          String        @default("USD")
+  // The date the money moved. Month bucketing is done on this field.
+  incurredAt        DateTime
+  periodStart       DateTime?
+  periodEnd         DateTime?
+  status            ExpenseStatus @default(PENDING_REVIEW)
+  source            ExpenseSource @default(MANUAL)
+  // Idempotency key for imports (an n8n message id, say). Null for manual entry;
+  // Postgres unique indexes ignore nulls, so hand-entered rows are unconstrained.
+  externalReference String?
+  notes             String?
+  reviewedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  vendor       Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  // A retrying importer must not double-count. Enforced by the database rather
+  // than an application check, so a race cannot slip through.
+  @@unique([workspaceId, source, externalReference])
+  @@index([workspaceId, incurredAt])
+  @@index([workspaceId, status])
+  @@index([workspaceId, projectId, incurredAt])
+  @@index([vendorId, incurredAt])
 }

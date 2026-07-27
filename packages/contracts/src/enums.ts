@@ -86,3 +86,24 @@ export const ProjectTemplateKey = [
   "empty",
 ] as const;
 export type ProjectTemplateKey = (typeof ProjectTemplateKey)[number];
+
+export const CostFrequency = ["MONTHLY", "YEARLY"] as const;
+export type CostFrequency = (typeof CostFrequency)[number];
+
+export const CostCategory = [
+  "HOSTING",
+  "SAAS",
+  "DOMAIN",
+  "INFRASTRUCTURE",
+  "MARKETING",
+  "CONTRACTOR",
+  "HARDWARE",
+  "OTHER",
+] as const;
+export type CostCategory = (typeof CostCategory)[number];
+
+export const ExpenseStatus = ["PENDING_REVIEW", "CONFIRMED", "REJECTED", "PAID"] as const;
+export type ExpenseStatus = (typeof ExpenseStatus)[number];
+
+export const ExpenseSource = ["MANUAL", "N8N_IMPORT", "FORWARDED_EMAIL"] as const;
+export type ExpenseSource = (typeof ExpenseSource)[number];

@@ -14,6 +14,7 @@ import { MilestonesModule } from "./modules/milestones/milestones.module";
 import { NotesModule } from "./modules/notes/notes.module";
 import { TimeEntriesModule } from "./modules/time-entries/time-entries.module";
 import { BudgetsModule } from "./modules/budgets/budgets.module";
+import { CostsModule } from "./modules/costs/costs.module";
 import { AutomationsModule } from "./modules/automations/automations.module";
 import { ActivityModule } from "./modules/activity/activity.module";
 import { WeeklyReviewModule } from "./modules/weekly-review/weekly-review.module";
@@ -34,6 +35,7 @@ import { SystemModule } from "./modules/system/system.module";
     NotesModule,
     TimeEntriesModule,
     BudgetsModule,
+    CostsModule,
     AutomationsModule,
     ActivityModule,
     WeeklyReviewModule,

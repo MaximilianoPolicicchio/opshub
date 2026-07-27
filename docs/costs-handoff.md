@@ -1,6 +1,7 @@
 # Operating Costs — handoff
 
-**Status: IN PROGRESS** — plan written, nothing implemented yet.
+**Status: PARTIAL** — schema, contracts and API are implemented and verified
+against a live database. The web UI is not built yet.
 
 Keep this file current. It is the contract with whoever picks the work up next,
 including a future me. Update it after every phase, not at the end.
@@ -83,9 +84,9 @@ nothing external can silently alter the monthly total.
 Phases are small and independently committable. Tick them off here as they land.
 
 - [x] **A. Handoff + design docs** — this file, `costs.md`, ADR 0008.
-- [ ] **B. Schema + migration + contracts** — Vendor, Subscription, Expense,
+- [x] **B. Schema + migration + contracts** — Vendor, Subscription, Expense,
       enums, Zod schemas.
-- [ ] **C. API** — vendors, subscriptions, expenses CRUD; review queue;
+- [x] **C. API** — vendors, subscriptions, expenses CRUD; review queue;
       monthly summary. Tenant-scoped, Zod-validated.
 - [ ] **D. Web** — Costs page: expenses list with filters, review queue,
       monthly summary, vendor and subscription management.
@@ -98,6 +99,17 @@ Phases are small and independently committable. Tick them off here as they land.
 
 ## Files created or modified
 
+Phase B + C:
+- `apps/api/prisma/schema.prisma` — Vendor, Subscription, Expense + 4 enums,
+  back-references on Workspace and Project
+- `apps/api/prisma/migrations/20260727172026_add_operating_costs/`
+- `apps/api/src/prisma/tenant-scoping.arch.spec.ts` — registered the 3 new
+  tenant models so unscoped writes fail the build
+- `apps/api/src/modules/costs/` — `costs.module.ts`, `costs.controller.ts`,
+  `costs.service.ts`, `cost-summary.logic.ts`, `cost-summary.logic.spec.ts`
+- `apps/api/src/app.module.ts` — registered CostsModule
+- `packages/contracts/src/enums.ts`, `schemas.ts` — cost enums and Zod schemas
+
 Phase A:
 - `docs/costs-handoff.md` (this file)
 - `docs/costs.md` — model, monthly rules, ingestion design
@@ -106,7 +118,16 @@ Phase A:
 
 ## Migrations applied
 
-_None yet._
+`20260727172026_add_operating_costs` — created via `prisma migrate dev`, applied
+to the local database. Adds `Vendor`, `Subscription`, `Expense` and the enums
+`CostFrequency`, `CostCategory`, `ExpenseStatus`, `ExpenseSource`.
+
+Two constraints in it are load-bearing:
+- `Vendor @@unique([workspaceId, normalizedName])` — stops the same supplier
+  fragmenting across capitalisations.
+- `Expense @@unique([workspaceId, source, externalReference])` — the idempotency
+  key for future imports. Nulls are ignored by Postgres, so manual rows are
+  unconstrained.
 
 ## Commands run, and their real results
 
@@ -114,6 +135,14 @@ _None yet._
 | --- | --- |
 | `git status` / `git log -1` | clean tree at `ece4096` |
 | schema + module inspection | patterns confirmed, see below |
+| `prisma validate` | valid |
+| `prisma migrate dev --name add_operating_costs` | applied, client regenerated |
+| `pnpm --filter @opshub/contracts build` | pass |
+| `pnpm --filter @opshub/api typecheck` | pass |
+| `pnpm --filter @opshub/api lint` | pass |
+| `pnpm --filter @opshub/api test` | pass (76 tests, incl. 21 new cost-summary) |
+| `pnpm --filter @opshub/api build` | pass |
+| manual API run against live Postgres | verified, see below |
 
 Findings from inspection, so the next agent does not repeat it:
 
@@ -132,9 +161,27 @@ Findings from inspection, so the next agent does not repeat it:
   `{ rows, total, page, pageSize }`, others a bare array. Match the hook to the
   endpoint or the UI silently renders nothing.
 
+## Verified by hand against a running API
+
+Logged in as the demo user and exercised the real endpoints:
+
+- `POST /costs/vendors` with `"  Vercel  "` stored `name: "Vercel"`,
+  `normalizedName: "vercel"`.
+- Creating `"VERCEL"` afterwards returned `VENDOR_ALREADY_EXISTS` with the
+  existing id — the deduplication works on a real round-trip, not just in tests.
+- `POST /costs/subscriptions` — Vercel Pro, 20.00 USD monthly, on Maxus Dental.
+- `POST /costs/expenses` for 25.00 stored `status: CONFIRMED`, `source: MANUAL`
+  (both server-set; the client cannot choose them).
+- `GET /costs/summary?month=2026-07` returned
+  `expected 20.00 / actual 25.00 / difference 5.00`, the same figures per
+  project, and a price increase of `20.00 -> 25.00 (25.00%)`.
+
 ## Errors and blockers
 
-_None yet._
+None so far. One thing worth knowing: Prisma serialises `Decimal` to JSON as a
+bare number (`25`), while the summary endpoint returns pre-formatted strings
+(`"25.00"`). The UI should format amounts from list endpoints rather than
+printing them raw.
 
 ---
 
@@ -150,19 +197,43 @@ No new variables are required for the manual MVP.
 
 ## Next 3 exact steps
 
-1. Add `Vendor`, `Subscription`, `Expense` and their enums to
-   `apps/api/prisma/schema.prisma`; generate the migration with
-   `pnpm --filter @opshub/api exec prisma migrate dev --name add_operating_costs`;
-   add the three models to the tenant list in `tenant-scoping.arch.spec.ts`.
-2. Add cost schemas to `packages/contracts/src/schemas.ts` and enums to
-   `enums.ts`, then `pnpm --filter @opshub/contracts build` before typechecking
-   anything that imports them.
-3. Build the `costs` NestJS module (vendors, subscriptions, expenses, summary),
-   following the `budgets` module layout with the summary maths in a
-   `*.logic.ts`.
+1. Add `apps/web/hooks/useCosts.ts` (TanStack Query, following
+   `useMilestones.ts`) plus the cost types in `apps/web/lib/types.ts` and keys
+   in `lib/query-keys.ts`. **All cost list endpoints return bare arrays**, not
+   `{ rows }` — match the hook to that or the UI silently renders nothing.
+2. Build `apps/web/app/(app)/costs/page.tsx`: month picker, summary cards
+   (expected / actual / difference per currency), per-project table, price
+   increases, review queue, expense list with filters. Add the nav entry to
+   `components/layout/Sidebar.tsx`.
+3. Write `apps/api/test/costs.e2e-spec.ts` covering cross-tenant isolation for
+   vendors, subscriptions and expenses (404 on read *and* on write, target row
+   unchanged), following `workspace-isolation.e2e-spec.ts`.
 
 ---
 
 ## How to test this manually
 
-_Will be filled in once phase C lands. Do not leave this section aspirational._
+API only for now — there is no UI yet.
+
+```bash
+pnpm --filter @opshub/api build && pnpm --filter @opshub/api start
+```
+
+Get a token, then:
+
+```bash
+# create a vendor
+curl -X POST localhost:4000/api/v1/costs/vendors   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json'   -d '{"name":"Vercel"}'
+
+# a monthly subscription for it
+curl -X POST localhost:4000/api/v1/costs/subscriptions   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json'   -d '{"vendorId":"<id>","name":"Vercel Pro","expectedAmount":"20.00"}'
+
+# a real charge that came in higher
+curl -X POST localhost:4000/api/v1/costs/expenses   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json'   -d '{"vendorId":"<id>","subscriptionId":"<id>","amount":"25.00","incurredAt":"2026-07-04T00:00:00.000Z"}'
+
+# the monthly close
+curl "localhost:4000/api/v1/costs/summary?month=2026-07" -H "Authorization: Bearer $TOKEN"
+```
+
+Expect `expected 20.00`, `actual 25.00`, `difference 5.00`, and one price
+increase at 25%.

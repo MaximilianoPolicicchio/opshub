@@ -9,6 +9,10 @@ import {
   RecurrenceUnit,
   RecurrenceAnchor,
   ProjectTemplateKey,
+  CostFrequency,
+  CostCategory,
+  ExpenseStatus,
+  ExpenseSource,
 } from "./enums";
 
 /**
@@ -284,3 +288,127 @@ export const surfaceTaskSchema = z.object({
   date: z.string().datetime(),
 });
 export type SurfaceTaskInput = z.infer<typeof surfaceTaskSchema>;
+
+// ---------------------------------------------------------------------------
+// Operating costs — see docs/costs.md
+// ---------------------------------------------------------------------------
+
+/**
+ * Amounts arrive as strings, not numbers. JSON numbers are IEEE-754 doubles, so
+ * a client sending 19.99 can hand the server 19.989999999999998 before Decimal
+ * ever sees it. A string survives the wire intact. Numbers are still accepted
+ * for convenience and coerced immediately.
+ */
+export const moneyAmountSchema = z
+  .union([z.string(), z.number()])
+  .transform((v) => (typeof v === "number" ? v.toFixed(2) : v.trim()))
+  .refine((v) => /^-?\d+(\.\d{1,2})?$/.test(v), {
+    message: "Must be a number with at most 2 decimal places",
+  })
+  .refine((v) => Number(v) >= 0, { message: "Must not be negative" });
+
+export const currencySchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .length(3, "Must be a 3-letter ISO 4217 code");
+
+export const createVendorSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  website: z.string().url().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+export type CreateVendorInput = z.infer<typeof createVendorSchema>;
+
+export const updateVendorSchema = createVendorSchema.partial();
+export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
+
+export const createSubscriptionSchema = z.object({
+  vendorId: z.string().min(1),
+  projectId: z.string().min(1).nullable().optional(),
+  name: z.string().trim().min(1).max(160),
+  expectedAmount: moneyAmountSchema,
+  currency: currencySchema.default("USD"),
+  frequency: z.enum(CostFrequency).default("MONTHLY"),
+  category: z.enum(CostCategory).default("SAAS"),
+  isActive: z.boolean().default(true),
+  nextChargeAt: z.string().datetime().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+export type CreateSubscriptionInput = z.infer<typeof createSubscriptionSchema>;
+
+export const updateSubscriptionSchema = createSubscriptionSchema.omit({ vendorId: true }).partial();
+export type UpdateSubscriptionInput = z.infer<typeof updateSubscriptionSchema>;
+
+export const createExpenseSchema = z
+  .object({
+    vendorId: z.string().min(1),
+    subscriptionId: z.string().min(1).nullable().optional(),
+    projectId: z.string().min(1).nullable().optional(),
+    amount: moneyAmountSchema,
+    currency: currencySchema.default("USD"),
+    incurredAt: z.string().datetime(),
+    periodStart: z.string().datetime().nullable().optional(),
+    periodEnd: z.string().datetime().nullable().optional(),
+    // Manual entry is trusted; imports are not. `source` and `status` are set by
+    // the server, never by the client, so a caller cannot post a CONFIRMED row.
+    notes: z.string().max(2000).nullable().optional(),
+  })
+  .refine(
+    (v) => !v.periodStart || !v.periodEnd || new Date(v.periodEnd) >= new Date(v.periodStart),
+    { message: "periodEnd must not be before periodStart", path: ["periodEnd"] },
+  );
+export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
+
+export const updateExpenseSchema = z.object({
+  vendorId: z.string().min(1).optional(),
+  subscriptionId: z.string().min(1).nullable().optional(),
+  projectId: z.string().min(1).nullable().optional(),
+  amount: moneyAmountSchema.optional(),
+  currency: currencySchema.optional(),
+  incurredAt: z.string().datetime().optional(),
+  periodStart: z.string().datetime().nullable().optional(),
+  periodEnd: z.string().datetime().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+export type UpdateExpenseInput = z.infer<typeof updateExpenseSchema>;
+
+/** Review decisions are a separate endpoint so a status change is deliberate. */
+export const reviewExpenseSchema = z.object({
+  status: z.enum(["CONFIRMED", "REJECTED", "PAID"]),
+});
+export type ReviewExpenseInput = z.infer<typeof reviewExpenseSchema>;
+
+/** `YYYY-MM`. The month is resolved in the workspace timezone server-side. */
+export const monthSchema = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Must be YYYY-MM");
+
+export const expenseFiltersSchema = z.object({
+  month: monthSchema.optional(),
+  projectId: z.string().min(1).optional(),
+  vendorId: z.string().min(1).optional(),
+  status: z.enum(ExpenseStatus).optional(),
+  source: z.enum(ExpenseSource).optional(),
+});
+export type ExpenseFilters = z.infer<typeof expenseFiltersSchema>;
+
+/**
+ * Payload for the future signed ingestion endpoint. Defined here so the
+ * contract is fixed and reviewable before any route exists — see ADR 0008.
+ * NOTE: no endpoint consumes this yet. Do not describe ingestion as working.
+ */
+export const ingestExpenseSchema = z.object({
+  source: z.enum(["N8N_IMPORT", "FORWARDED_EMAIL"]),
+  externalMessageId: z.string().trim().min(1).max(255),
+  vendorName: z.string().trim().min(1).max(160),
+  amount: moneyAmountSchema,
+  currency: currencySchema.default("USD"),
+  date: z.string().datetime(),
+  periodStart: z.string().datetime().nullable().optional(),
+  periodEnd: z.string().datetime().nullable().optional(),
+  projectId: z.string().min(1).nullable().optional(),
+  // Deliberately short: this is a label, not a place to dump an email body.
+  notes: z.string().max(500).nullable().optional(),
+});
+export type IngestExpenseInput = z.infer<typeof ingestExpenseSchema>;
