@@ -180,6 +180,22 @@ describe("summariseMonth", () => {
     });
   });
 
+  it("reports one row per subscription even when it is charged twice over", () => {
+    const s = summariseMonth({
+      ...JULY,
+      subscriptions: [sub({ id: "s1", name: "Vercel Pro", expectedAmount: "20.00" })],
+      expenses: [
+        exp({ id: "a", subscriptionId: "s1", amount: "25.00" }),
+        exp({ id: "b", subscriptionId: "s1", amount: "30.00" }),
+      ],
+    });
+
+    // Two identical-looking rows for the same subscription read as a bug.
+    expect(s.priceIncreases).toHaveLength(1);
+    // The worst one is the informative one.
+    expect(s.priceIncreases[0]!.chargedAmount).toBe("30.00");
+  });
+
   it("does not flag a rounding-sized difference", () => {
     const s = summariseMonth({
       ...JULY,

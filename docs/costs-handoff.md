@@ -104,6 +104,14 @@ Phases are small and independently committable. Tick them off here as they land.
 
 ## Files created or modified
 
+Phase G (demo data):
+- `apps/api/prisma/seed.ts` — 5 vendors, 5 subscriptions, 5 expenses in the
+  demo workspace. Idempotent: vendors matched on `normalizedName`,
+  subscriptions on name, expenses on a `seed-*` `externalReference`. Verified
+  by running the seed twice and confirming the counts did not move.
+- `apps/api/src/modules/costs/cost-summary.logic.ts` — price increases are now
+  deduplicated per subscription.
+
 Phase D + E:
 - `apps/web/app/(app)/costs/page.tsx` — summary, review queue, price increases,
   per-project table, expense list with filters, subscriptions, and dialogs for
@@ -163,6 +171,8 @@ Two constraints in it are load-bearing:
 | `pnpm --filter @opshub/api test` | **76 passed**, 8 suites |
 | `pnpm --filter @opshub/api test:e2e` | **49 passed**, 8 suites |
 | browser check of `/costs` | verified, see below |
+| `db:seed` run twice | idempotent — 5 vendors / 5 subs / 5 expenses both times |
+| `pnpm --filter @opshub/api test` (after seed work) | **77 passed** |
 
 Findings from inspection, so the next agent does not repeat it:
 
@@ -215,6 +225,13 @@ so a malformed month threw a raw `ZodError` and Nest returned **500** instead of
 400. Now parsed with `safeParse` and mapped to the standard 400 envelope; the
 test that caught it is kept.
 
+**A UI bug the seeded data exposed.** With two expenses linked to the same
+subscription, the price-increases table rendered the same subscription twice
+with identical figures — which reads as a rendering fault rather than as two
+charges. `summariseMonth` now emits one row per subscription, keeping the
+largest increase. That is also the more honest answer to "which subscriptions
+went up", which is a question about subscriptions, not about charges.
+
 Otherwise none. One thing worth knowing: Prisma serialises `Decimal` to JSON as a
 bare number (`25`), while the summary endpoint returns pre-formatted strings
 (`"25.00"`). The UI should format amounts from list endpoints rather than
@@ -234,20 +251,17 @@ No new variables are required for the manual MVP.
 
 ## Next 3 exact steps
 
-The manual MVP is complete. In priority order:
+The manual MVP is complete, and the seed now populates it. In priority order:
 
-1. **Seed demo cost data.** `apps/api/prisma/seed.ts` creates the four projects
-   but no vendors, subscriptions or expenses, so `/costs` is empty on a fresh
-   database and the feature looks unfinished. Add a handful of fabricated
-   subscriptions across the four projects, one deliberate price rise, and one
-   `PENDING_REVIEW` row so the review queue is visible. Keep it obviously fake,
-   like the rest of the seed.
-2. **Editing from the UI.** The API supports `PATCH` on subscriptions and
+1. **Editing from the UI.** The API supports `PATCH` on subscriptions and
    expenses, and the hooks (`useUpdateSubscription`, `useUpdateExpense`,
    `useDeleteExpense`) are already written and unused. The page currently only
    creates and reviews. Wire up edit and delete, and add a "raise the expected
    amount to the charged amount" action on a flagged price increase — today the
    user has to retype it.
+2. **Browser coverage.** The Playwright suite does not touch `/costs`. Add a
+   spec that logs an expense and confirms a queued one, following
+   `e2e/core-flows.spec.ts` (each spec registers its own workspace).
 3. **The ingestion endpoint, only when manual entry becomes the bottleneck.**
    Build `POST /costs/ingest` exactly as specified in `docs/costs.md`: HMAC over
    the raw body with `COST_INGESTION_SECRET`, `ingestExpenseSchema` (already in

@@ -494,6 +494,110 @@ async function main() {
   }
   console.log("Seeded ~12 historical automation runs");
 
+  // 9. Operating costs. Every figure below is invented. See docs/costs.md.
+  //
+  // Shaped so the Costs page has something to show on a fresh database: one
+  // price rise to flag, one item waiting in the review queue, one yearly
+  // renewal, and shared infrastructure with no project so the Unassigned
+  // bucket is visible rather than theoretical.
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const dayThisMonth = (day: number) =>
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day));
+
+  const vendorSpecs = [
+    { key: "vercel", name: "Vercel" },
+    { key: "supabase", name: "Supabase" },
+    { key: "namecheap", name: "Namecheap" },
+    { key: "twilio", name: "Twilio" },
+    { key: "figma", name: "Figma" },
+  ];
+  const vendors: Record<string, { id: string }> = {};
+  for (const v of vendorSpecs) {
+    const normalizedName = v.name.trim().toLowerCase().replace(/\s+/g, " ");
+    const existing = await prisma.vendor.findFirst({
+      where: { workspaceId: workspace.id, normalizedName },
+      select: { id: true },
+    });
+    vendors[v.key] = existing
+      ? existing
+      : await prisma.vendor.create({
+          data: { workspaceId: workspace.id, name: v.name, normalizedName },
+          select: { id: true },
+        });
+  }
+  console.log(`Seeded ${vendorSpecs.length} vendors`);
+
+  const subscriptionSpecs = [
+    // The price rise: expected 20, actually charged 25 below.
+    { key: "vercelPro", vendor: "vercel", project: hernanShop.id, name: "Vercel Pro", amount: "20.00", frequency: "MONTHLY" as const, category: "HOSTING" as const },
+    { key: "supabaseDental", vendor: "supabase", project: maxusDental.id, name: "Supabase Pro", amount: "25.00", frequency: "MONTHLY" as const, category: "INFRASTRUCTURE" as const },
+    { key: "twilioSms", vendor: "twilio", project: consultorio.id, name: "Twilio SMS", amount: "15.00", frequency: "MONTHLY" as const, category: "SAAS" as const },
+    // Shared design tooling: deliberately unassigned.
+    { key: "figma", vendor: "figma", project: null, name: "Figma Professional", amount: "12.00", frequency: "MONTHLY" as const, category: "SAAS" as const },
+    // Yearly, with a charge date so it is schedulable.
+    { key: "domain", vendor: "namecheap", project: maxusMarket.id, name: "Domain renewal", amount: "18.00", frequency: "YEARLY" as const, category: "DOMAIN" as const },
+  ];
+  const subs: Record<string, { id: string }> = {};
+  for (const spec of subscriptionSpecs) {
+    const existing = await prisma.subscription.findFirst({
+      where: { workspaceId: workspace.id, name: spec.name },
+      select: { id: true },
+    });
+    const data = {
+      workspaceId: workspace.id,
+      vendorId: vendors[spec.vendor]!.id,
+      projectId: spec.project,
+      name: spec.name,
+      expectedAmount: spec.amount,
+      currency: "USD",
+      frequency: spec.frequency,
+      category: spec.category,
+      isActive: true,
+      nextChargeAt: spec.frequency === "YEARLY" ? dayThisMonth(22) : null,
+    };
+    subs[spec.key] = existing
+      ? await prisma.subscription.update({ where: { id: existing.id, workspaceId: workspace.id }, data, select: { id: true } })
+      : await prisma.subscription.create({ data, select: { id: true } });
+  }
+  console.log(`Seeded ${subscriptionSpecs.length} subscriptions`);
+
+  const expenseSpecs = [
+    // Charged 25 against an expected 20 -> flagged as a price increase.
+    { ref: "seed-vercel", vendor: "vercel", sub: "vercelPro", project: hernanShop.id, amount: "25.00", day: 4, status: "CONFIRMED" as const, notes: "Plan price went up" },
+    { ref: "seed-supabase", vendor: "supabase", sub: "supabaseDental", project: maxusDental.id, amount: "25.00", day: 3, status: "PAID" as const, notes: null },
+    { ref: "seed-twilio", vendor: "twilio", sub: "twilioSms", project: consultorio.id, amount: "15.00", day: 6, status: "CONFIRMED" as const, notes: null },
+    { ref: "seed-figma", vendor: "figma", sub: "figma", project: null, amount: "12.00", day: 2, status: "CONFIRMED" as const, notes: "Shared across projects" },
+    // Waiting in the review queue, so it is excluded from the totals on purpose.
+    { ref: "seed-review", vendor: "twilio", sub: null, project: null, amount: "48.00", day: 9, status: "PENDING_REVIEW" as const, notes: "Unexpected overage charge" },
+  ];
+  for (const spec of expenseSpecs) {
+    const existing = await prisma.expense.findFirst({
+      where: { workspaceId: workspace.id, externalReference: spec.ref },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await prisma.expense.create({
+      data: {
+        workspaceId: workspace.id,
+        vendorId: vendors[spec.vendor]!.id,
+        subscriptionId: spec.sub ? subs[spec.sub]!.id : null,
+        projectId: spec.project,
+        amount: spec.amount,
+        currency: "USD",
+        incurredAt: dayThisMonth(spec.day),
+        periodStart: monthStart,
+        status: spec.status,
+        // MANUAL, not N8N_IMPORT: no importer exists, and the seed must not
+        // imply one ever ran.
+        source: "MANUAL",
+        externalReference: spec.ref,
+        reviewedAt: spec.status === "PENDING_REVIEW" ? null : dayThisMonth(spec.day),
+        notes: spec.notes,
+      },
+    });
+  }
+  console.log(`Seeded ${expenseSpecs.length} expenses (1 awaiting review, 1 price increase)`);
+
   // 8b. Run the real evaluators (also serves as an e2e smoke test of those code paths).
   for (const project of [hernanShop, maxusDental, maxusMarket, consultorio]) {
     await evaluateAndPersistHealth(project.id, workspace.id);
