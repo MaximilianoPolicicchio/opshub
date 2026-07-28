@@ -9,6 +9,7 @@ The README is the 30-second version. This is the rest.
 | [costs.md](costs.md) | Operating costs: model, monthly rules, and the (unbuilt) ingestion design |
 | [costs-handoff.md](costs-handoff.md) | Live status of the costs module — read this before working on it |
 | [automations.md](automations.md) | Webhook contract, payloads, signature verification, run recording |
+| [docker-handoff.md](docker-handoff.md) | Docker validation status, defects found, and what is still unrun |
 | [deployment.md](deployment.md) | Environment variables, migrations, health checks, rollback |
 | [security.md](security.md) | Threat model and the isolation mechanism in detail |
 | [adr/](adr/) | Architecture decision records — what was chosen, what was rejected, and when to revisit |

@@ -8,12 +8,22 @@ dist
 **/.next
 out
 coverage
+playwright-report
+test-results
 *.log
-.env
-.env.local
-.env.*.local
 *.tsbuildinfo
 .DS_Store
+
+# Every env file, then re-include only the committed examples.
+#
+# Listing `.env`, `.env.local` and `.env.*.local` individually used to miss
+# `.env.docker` — the exact file the README tells you to create and fill with
+# secrets. `COPY . .` would have baked it into an image layer, where deleting it
+# later does not remove it.
+.env*
+!.env.example
+!.env.docker.example
+
 docs
 README.md
 PROJECT_PLAN.md
