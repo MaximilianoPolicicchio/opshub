@@ -43,6 +43,26 @@ RUN pnpm --filter @opshub/api build
 # Drop dev dependencies from the tree we are about to copy into the runtime.
 RUN pnpm --filter @opshub/api --prod deploy /app-api
 
+# `deploy` rebuilds node_modules by linking from the pnpm store, and the store
+# does not hold the generated Prisma client — `prisma generate` above wrote it
+# into this stage's virtual store, which is not what `deploy` copies from. Left
+# alone, the runtime image starts and dies on the first query with
+# "@prisma/client did not initialize yet".
+#
+# Reproduced outside Docker; see docs/docker-handoff.md. Regenerate against the
+# deployed tree using this stage's Prisma CLI, which is a devDependency and so
+# exists here but not in the runtime stage.
+#
+# The instantiation check fails the build rather than the container. Its dummy
+# DATABASE_URL only satisfies env validation — constructing a client opens no
+# connection.
+RUN mkdir -p /app-api/prisma \
+    && cp apps/api/prisma/schema.prisma /app-api/prisma/schema.prisma \
+    && cd /app-api \
+    && /repo/apps/api/node_modules/.bin/prisma generate --schema ./prisma/schema.prisma \
+    && DATABASE_URL="postgresql://user:pass@localhost:5432/db" \
+       node -e "new (require('@prisma/client').PrismaClient)(); console.log('prisma client OK')"
+
 # ---------------------------------------------------------------- migrator
 # Migrations need the Prisma CLI, which is a devDependency and therefore absent
 # from the pruned runtime image. This stage keeps the full build tree and does

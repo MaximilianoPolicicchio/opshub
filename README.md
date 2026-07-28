@@ -244,10 +244,13 @@ pnpm docker:seed    # load the fabricated demo workspace
 pnpm docker:reset   # stop everything and drop the data volume
 ```
 
-> **Unverified.** Docker is not installed on the machine these files were
-> authored on, so no image has actually been built. The Dockerfiles and
-> `compose.yaml` are reviewed and statically valid, but treat them as unproven
-> until someone runs the command above.
+> **Not yet validated end to end.** Docker is not installed on the machine this
+> was authored on, so no image has ever been built. A static audit did find and
+> fix two real defects — a missing Prisma client that would have crash-looped
+> the API container, and `.env.docker` leaking into the image — both reproduced
+> without Docker. That removes two known failure modes; it does not prove the
+> build succeeds. See [docs/docker-handoff.md](docs/docker-handoff.md) for the
+> evidence and the exact steps to finish validating.
 
 ## Local setup
 
@@ -590,10 +593,11 @@ Honest scope boundaries for v1:
   need more fixture setup — dependency gating in the UI, the timer, budget burn
   updating live, simulating an automation — are still only covered by the API
   e2e suite.
-- **Docker is unverified.** The Dockerfiles and `compose.yaml` are written and
-  statically valid, but Docker is not installed on the machine they were
-  authored on, so no image has actually been built. Treat the container setup as
-  reviewed-but-unproven until someone runs `docker compose up --build`.
+- **Docker is not validated end to end.** No image has ever been built, because
+  Docker is not installed on the machine this was authored on. A static audit
+  fixed two defects that would have broken it (see
+  [docs/docker-handoff.md](docs/docker-handoff.md)), but the build itself,
+  service startup, healthchecks and container networking are all still unproven.
 - **Financial Overview does not yet surface budget alerts** or an estimated-vs-
   actual hours column; both live on the per-project Budget tab. The
   cross-project rollup shows budget, tracked value, remaining, billable hours,
