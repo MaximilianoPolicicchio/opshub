@@ -29,6 +29,15 @@ ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
 WORKDIR /repo
 
+# openssl must be present *before* `prisma generate` runs. Without it Prisma
+# misdetects the platform and emits the debian-openssl-1.1.x query engine, which
+# then fails to load on bookworm (OpenSSL 3) with:
+#   Unable to require(.../libquery_engine-debian-openssl-1.1.x.so.node)
+# Caught by the client-instantiation check further down.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=deps /repo/apps/api/node_modules ./apps/api/node_modules
 COPY --from=deps /repo/packages/contracts/node_modules ./packages/contracts/node_modules
