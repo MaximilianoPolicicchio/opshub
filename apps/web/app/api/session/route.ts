@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+/**
+ * This handler runs on the server, so it needs a URL reachable from *there* —
+ * which is not the one the browser uses. Under Docker,
+ * NEXT_PUBLIC_API_URL is http://localhost:4000 because that is what resolves in
+ * the user's browser; inside the web container `localhost` is the container
+ * itself, so every token exchange failed with a 500 and the app bounced to the
+ * sign-in page on each navigation.
+ *
+ * API_INTERNAL_URL is the server-side address (http://api:4000/api/v1 in
+ * compose). It falls back to the public one for non-containerised runs, where
+ * both happen to be the same host.
+ */
+const API_URL =
+  process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 const COOKIE_NAME = "opshub_refresh";
 const REFRESH_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days, matches API refresh TTL
 

@@ -95,6 +95,16 @@ services:
         condition: service_started
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api/v1}
+      # This stack serves plain HTTP on localhost, but the image runs with
+      # NODE_ENV=production, which marks the session cookie Secure. The browser
+      # then never sends it back and every navigation bounces to the sign-in
+      # page. Behind real HTTPS, leave this unset so the safe default applies.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Server-side address for the Next route handler. NEXT_PUBLIC_API_URL is
+      # the browser's view (localhost), which inside this container points at
+      # the container itself — token exchange 500s and every navigation bounces
+      # to sign-in. `api` is the compose service name.
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4000/api/v1}
     ports:
       - "${WEB_PORT:-3000}:3000"
 
