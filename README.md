@@ -244,13 +244,11 @@ pnpm docker:seed    # load the fabricated demo workspace
 pnpm docker:reset   # stop everything and drop the data volume
 ```
 
-> **Not yet validated end to end.** Docker is not installed on the machine this
-> was authored on, so no image has ever been built. A static audit did find and
-> fix two real defects — a missing Prisma client that would have crash-looped
-> the API container, and `.env.docker` leaking into the image — both reproduced
-> without Docker. That removes two known failure modes; it does not prove the
-> build succeeds. See [docs/docker-handoff.md](docs/docker-handoff.md) for the
-> evidence and the exact steps to finish validating.
+> **Validated end to end** on 2026-07-29 — built, started, signed in through the
+> browser, read and wrote against the containers. Getting there took five real
+> defects that CI could not see, because CI builds and tests but never runs a
+> container. They are written up in
+> [docs/docker-handoff.md](docs/docker-handoff.md).
 
 ## Local setup
 
@@ -593,11 +591,12 @@ Honest scope boundaries for v1:
   need more fixture setup — dependency gating in the UI, the timer, budget burn
   updating live, simulating an automation — are still only covered by the API
   e2e suite.
-- **Docker is not validated end to end.** No image has ever been built, because
-  Docker is not installed on the machine this was authored on. A static audit
-  fixed two defects that would have broken it (see
-  [docs/docker-handoff.md](docs/docker-handoff.md)), but the build itself,
-  service startup, healthchecks and container networking are all still unproven.
+- **Docker is validated locally, not on a clean machine.** The stack builds and
+  runs (see [docs/docker-handoff.md](docs/docker-handoff.md)), but every run so
+  far used a warm build cache and an existing volume. Compose is a development
+  convenience, not a deployment: no resource limits, no secrets management, and
+  `SCHEDULER_ENABLED` defaults to true, which is wrong for more than one API
+  replica.
 - **Financial Overview does not yet surface budget alerts** or an estimated-vs-
   actual hours column; both live on the per-project Budget tab. The
   cross-project rollup shows budget, tracked value, remaining, billable hours,

@@ -3,9 +3,11 @@
 There is no production deployment. This is the procedure to create one, written
 so it can be followed rather than improvised.
 
-> **Docker status:** the compose stack has never been run. See
-> [docker-handoff.md](docker-handoff.md) for what was verified statically, the
-> two defects that were fixed, and the exact commands still to run.
+> **Docker status:** the compose stack is validated end to end — see
+> [docker-handoff.md](docker-handoff.md) for what was checked and the five
+> defects it uncovered. Two of them matter here: the web server needs
+> `API_INTERNAL_URL` (its own view of the API, distinct from the browser's
+> `NEXT_PUBLIC_API_URL`), and `COOKIE_SECURE` must stay unset behind HTTPS.
 
 ## Requirements
 
