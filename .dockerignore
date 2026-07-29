@@ -14,15 +14,20 @@ test-results
 *.tsbuildinfo
 .DS_Store
 
-# Every env file, then re-include only the committed examples.
+# Every env file at any depth, then re-include only the committed examples.
 #
-# Listing `.env`, `.env.local` and `.env.*.local` individually used to miss
-# `.env.docker` — the exact file the README tells you to create and fill with
-# secrets. `COPY . .` would have baked it into an image layer, where deleting it
-# later does not remove it.
-.env*
-!.env.example
-!.env.docker.example
+# Two mistakes were made here in turn. First, listing `.env`, `.env.local` and
+# `.env.*.local` individually missed `.env.docker` — the file the README tells
+# you to create and fill with secrets. Then `.env*` alone still missed
+# `apps/api/.env`, because a pattern without `**/` only matches the context
+# root; that file really did end up at /app/.env in a built image, carrying
+# DATABASE_URL and both JWT secrets.
+#
+# A layer keeps whatever it copied, so deleting the file later does not undo it.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.docker.example
 
 docs
 README.md
